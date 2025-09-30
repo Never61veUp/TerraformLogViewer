@@ -1,5 +1,5 @@
 ﻿networks:
-  deploy-guide-prod:
+  coolify:
     driver: bridge
 
 services:
@@ -15,4 +15,4 @@ services:
       - ASPNETCORE_URLS=http://+:5050
     restart: unless-stopped
     networks:
-      - ${NETWORK}
+      - coolify
