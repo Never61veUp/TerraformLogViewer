@@ -17,7 +17,7 @@ public sealed class LogController : BaseController
         _logParseService = logParseService;
     }
     
-    [HttpGet("processing-log-json")]
+    [HttpPost("upload-log-json")]
     public async Task<IActionResult> UploadJson(IFormFile file, CancellationToken cancellationToken)
     {
         if (file.Length == 0)
@@ -30,9 +30,16 @@ public sealed class LogController : BaseController
         using var reader = new StreamReader(stream);
         var content = await reader.ReadToEndAsync(cancellationToken);
 
-        await _logParseService.Parse(content, cancellationToken);
+        var result = await _logParseService.Load(content, cancellationToken);
         
-        throw new NotImplementedException();
-        return FromResult(Result.Success());
+        return FromResult(result);
+    }
+    
+    [HttpGet("get-processed-log-json")]
+    public async Task<IActionResult> GetProcessedLogs(CancellationToken cancellationToken)
+    {
+        var result = await _logParseService.GetProcessed(cancellationToken);
+        
+        return FromResult(result);
     }
 }

@@ -4,5 +4,6 @@ namespace LogViewer.Application.Abstractions;
 
 public interface ILogParseService
 {
-    Task<Result<string>> Parse(string log, CancellationToken cancelationToken = default);
+    Task<Result<string>> GetProcessed(CancellationToken cancelationToken = default);
+    Task<Result> Load(string log, CancellationToken cancelationToken = default);
 }
