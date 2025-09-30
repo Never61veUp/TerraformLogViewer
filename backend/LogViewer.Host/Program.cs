@@ -10,20 +10,9 @@ builder.Services.AddScoped<ILogParseService, LogParseService>();
 
 builder.Services.AddControllers();
 // Learn more about configuring OpenAPI at https://aka.ms/aspnet/openapi
-builder.Services.AddOpenApi();
-
-var app = builder.Build();
-
-// Configure the HTTP request pipeline.
-if (app.Environment.IsDevelopment())
-{
-    app.MapOpenApi();
-}
-
+// builder.Services.AddOpenApi();
 services.AddEndpointsApiExplorer();
 services.AddSwaggerGen();
-app.UseSwagger();
-app.UseSwaggerUI();
 
 builder.Services.AddCors(options =>
 {
@@ -34,6 +23,18 @@ builder.Services.AddCors(options =>
             .AllowAnyHeader();
     });
 });
+
+var app = builder.Build();
+
+// Configure the HTTP request pipeline.
+if (app.Environment.IsDevelopment())
+{
+    // app.MapOpenApi();
+}
+
+
+app.UseSwagger();
+app.UseSwaggerUI();
 
 app.UseCors("AllowAll");
 
