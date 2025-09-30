@@ -1,0 +1,6 @@
+@LogViewer.Host_HostAddress = http://localhost:5277
+
+GET {{LogViewer.Host_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###

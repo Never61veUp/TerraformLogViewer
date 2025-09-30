@@ -1,0 +1,6 @@
+﻿services:
+  logviewer.host:
+    image: logviewer.host
+    build:
+      context: .
+      dockerfile: LogViewer.Host/Dockerfile

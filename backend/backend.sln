@@ -1,0 +1,21 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "LogViewer.Host", "LogViewer.Host\LogViewer.Host.csproj", "{ABC16C26-42D1-4248-A27D-81153B77C4FB}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Solution Items", "Solution Items", "{97EEDD25-758A-49C2-904F-79E7B479CFB7}"
+	ProjectSection(SolutionItems) = preProject
+		compose.yaml = compose.yaml
+	EndProjectSection
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{ABC16C26-42D1-4248-A27D-81153B77C4FB}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{ABC16C26-42D1-4248-A27D-81153B77C4FB}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{ABC16C26-42D1-4248-A27D-81153B77C4FB}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{ABC16C26-42D1-4248-A27D-81153B77C4FB}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+EndGlobal
