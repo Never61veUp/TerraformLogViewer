@@ -15,4 +15,4 @@ services:
       - ASPNETCORE_URLS=http://+:5050
     restart: unless-stopped
     networks:
-      - coolify
+      - x08kckw84skck8cc08kksg84
