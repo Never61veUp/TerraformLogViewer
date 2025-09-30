@@ -1,6 +1,11 @@
 ﻿services:
   logviewer.host:
-    image: logviewer.host
+    container_name: logviewer-host
     build:
       context: .
       dockerfile: LogViewer.Host/Dockerfile
+    ports:
+      - "5050:5050"
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Production
+      - ASPNETCORE_URLS=http://+:5050

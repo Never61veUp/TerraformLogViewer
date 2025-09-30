@@ -14,7 +14,7 @@ using System.Reflection;
 [assembly: System.Reflection.AssemblyCompanyAttribute("LogViewer.Host")]
 [assembly: System.Reflection.AssemblyConfigurationAttribute("Debug")]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+2b5e520fc3e466638b579d334228fb1281f8eec7")]
 [assembly: System.Reflection.AssemblyProductAttribute("LogViewer.Host")]
 [assembly: System.Reflection.AssemblyTitleAttribute("LogViewer.Host")]
 [assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]
