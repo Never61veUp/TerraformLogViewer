@@ -1,4 +1,5 @@
 using CSharpFunctionalExtensions;
+using LogViewer.Application.DTOs;
 
 namespace LogViewer.Application.Abstractions;
 

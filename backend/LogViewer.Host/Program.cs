@@ -1,4 +1,6 @@
+using System.Reflection;
 using LogViewer.Application.Abstractions;
+using LogViewer.Application.Commands;
 using LogViewer.Application.Services;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -6,6 +8,9 @@ var configuration = builder.Configuration;
 var services = builder.Services;
 
 // Add services to the container.
+builder.Services.AddMediatR(cfg => 
+    cfg.RegisterServicesFromAssembly(typeof(UploadJsonLogCommand).Assembly));
+
 builder.Services.AddScoped<ILogParseService, LogParseService>();
 
 builder.Services.AddControllers();
