@@ -1,4 +1,8 @@
-﻿services:
+﻿networks:
+  deploy-guide-prod:
+    driver: bridge
+
+services:
   logviewer.host:
     container_name: logviewer-host
     build:
