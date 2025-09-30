@@ -12,6 +12,8 @@ builder.Services.AddMediatR(cfg =>
     cfg.RegisterServicesFromAssembly(typeof(UploadJsonLogCommand).Assembly));
 
 builder.Services.AddScoped<ILogParseService, LogParseService>();
+builder.Services.AddScoped<ILogLevelDetector, LogLevelDetector>();
+builder.Services.AddScoped<ITimeStampService, TimeStampService>();
 
 builder.Services.AddControllers();
 // Learn more about configuring OpenAPI at https://aka.ms/aspnet/openapi

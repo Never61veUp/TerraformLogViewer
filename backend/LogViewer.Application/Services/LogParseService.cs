@@ -7,6 +7,12 @@ namespace LogViewer.Application.Services;
 
 public sealed class LogParseService : ILogParseService
 {
+    private readonly ITimeStampService _timeStampService;
+
+    public LogParseService(ITimeStampService timeStampService)
+    {
+        _timeStampService = timeStampService;
+    }
     public Task<Result<string>> GetProcessed(CancellationToken cancelationToken = default)
     {
         throw new NotImplementedException();

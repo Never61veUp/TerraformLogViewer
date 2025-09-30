@@ -29,8 +29,8 @@ public sealed class LogController : BaseController
         
         if (result.IsSuccess)
             return Ok();
-        else
-            return BadRequest(new { error = result.Error });
+        
+        return BadRequest(new { error = result.Error });
     }
     
     [HttpGet("get-processed-log-json")]
