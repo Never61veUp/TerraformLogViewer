@@ -2,6 +2,7 @@
 import React, { useEffect, useState } from "react";
 import dynamic from "next/dynamic";
 import { motion } from "framer-motion";
+import Link from "next/link";
 
 interface ChartPoint {
     x: string;
@@ -101,12 +102,12 @@ export default function Hero() {
                     transition={{ delay: 0.35 }}
                     className="mt-6 flex gap-3"
                 >
-                    <a
+                    <Link
+                        href="/LogExplorer"
                         className="inline-flex items-center gap-2 px-5 py-3 rounded-full bg-[var(--primary)] text-[var(--background)] font-semibold"
-                        href="#"
                     >
                         Начать работу
-                    </a>
+                    </Link>
                     <a
                         className="inline-flex items-center gap-2 px-5 py-3 rounded-full border border-[rgba(14,20,18,0.1)] text-sm text-[var(--text)]"
                         href="#"
