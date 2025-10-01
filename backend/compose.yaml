@@ -1,4 +1,8 @@
-﻿services:
+﻿networks:
+  coolify:
+    external: true
+
+services:
   logviewer.host:
     container_name: logviewer-host
     build:
@@ -9,3 +13,5 @@
     environment:
       - ASPNETCORE_ENVIRONMENT=Production
       - ASPNETCORE_URLS=http://+:5050
+    networks:
+      - coolify
