@@ -81,5 +81,6 @@ public class ProcessedLogsDto
     [JsonExtensionData] public Dictionary<string, object>? AdditionalData { get; set; }
 
     public DateTimeOffset? TimestampParsed { get; set; }
+    [JsonConverter(typeof(JsonStringEnumConverter))]
     public LogLevel LevelParsed { get; set; } = LogLevel.Unknown;
 }
