@@ -1,6 +1,6 @@
 ﻿networks:
   coolify:
-    driver: bridge
+    external: true
 
 services:
   logviewer.host:
@@ -15,4 +15,4 @@ services:
       - ASPNETCORE_URLS=http://+:5050
     restart: unless-stopped
     networks:
-      - x08kckw84skck8cc08kksg84
+      - coolify
