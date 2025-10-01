@@ -9,7 +9,7 @@ using Microsoft.AspNetCore.Http;
 
 namespace LogViewer.Application.Services;
 
-public sealed class LogParseService : ILogParseService
+public sealed partial class LogParseService : ILogParseService
 {
     private readonly IGroupDetector _groupDetector;
 
@@ -36,27 +36,10 @@ public sealed class LogParseService : ILogParseService
         throw new NotImplementedException();
     }
 
-    public class TerraformOperationBlock
-    {
-        public string Type { get; set; } // "plan", "apply", "other"
-        public List<ProcessedLogsDto> Logs { get; set; } = new List<ProcessedLogsDto>();
-        public int LogCount { get; set; }
-        public DateTime StartTime { get; set; }
-        public DateTime EndTime { get; set; }
-        public string Id { get; set; }
-        public string CreatedById { get; set; }
-        public string CreatedByName { get; set; }
-        public string ModifiedById { get; set; }
-        public string ModifiedByName { get; set; }
-        public DateTime CreatedTimeStamp { get; set; }
-        public DateTime ModifiedTimeStamp { get; set; }
-    }
-    
-
-    public async Task<Result<IEnumerable<TerraformOperationBlock>>> Load(IFormFile file, CancellationToken cancellationToken)
+    public async Task<Result<IEnumerable<DTOs.LogParseService.TerraformOperationBlockDto>>> Load(IFormFile file, CancellationToken cancellationToken)
     {
         if (file.Length == 0)
-            return Result.Failure<IEnumerable<TerraformOperationBlock>>("File is empty");
+            return Result.Failure<IEnumerable<DTOs.LogParseService.TerraformOperationBlockDto>>("File is empty");
 
         var logEntries = new List<ProcessedLogsDto>();
         var errorCount = 0;
@@ -95,7 +78,7 @@ public sealed class LogParseService : ILogParseService
             var errorMessage = errorCount > 0
                 ? $"No valid log entries found. {errorCount} lines had parsing errors."
                 : "No valid log entries found in the provided content.";
-            return Result.Failure<IEnumerable<TerraformOperationBlock>>(errorMessage);
+            return Result.Failure<IEnumerable<DTOs.LogParseService.TerraformOperationBlockDto>>(errorMessage);
         }
         
         Console.WriteLine($"Успешно распарсено {logEntries.Count} записей лога");
@@ -114,7 +97,6 @@ public sealed class LogParseService : ILogParseService
             Console.WriteLine($"Start: {block.StartTime}");
             Console.WriteLine($"End: {block.EndTime}");
             Console.WriteLine($"Duration: {block.EndTime - block.StartTime}");
-            Console.WriteLine($"Created By: {block.CreatedByName}");
     
             // Первый элемент
             if (block.Logs.Count > 0)
@@ -142,9 +124,8 @@ public sealed class LogParseService : ILogParseService
         // Возвращаем сгруппированные данные
         return Result.Success(groupedLogs);
     }
-
-    // Метод группировки (добавить в класс)
-    private IEnumerable<TerraformOperationBlock> GroupLogsByOperationType(List<ProcessedLogsDto> logEntries)
+    
+    private IEnumerable<DTOs.LogParseService.TerraformOperationBlockDto> GroupLogsByOperationType(List<ProcessedLogsDto> logEntries)
     {
         // Более гибкие регулярные выражения
         var planStartPatterns = new[]
@@ -220,21 +201,8 @@ public sealed class LogParseService : ILogParseService
             // Отменено
             @"Apply\s+cancelled",
         };
-        
-        var errorPatterns = new[]
-        {
-            @"Error:",
-            @"Error\s+creating|Error\s+reading|Error\s+updating",
-            @"failed",
-            @"failure",
-            @"unsuccessful",
-            @"rollback",
-            @"timeout",
-            @"cancelled",
-            @"interrupted",
-        };
 
-        var result = new List<TerraformOperationBlock>();
+        var result = new List<DTOs.LogParseService.TerraformOperationBlockDto>();
         var currentBlock = new List<ProcessedLogsDto>();
         string currentType = "other";
         
@@ -305,9 +273,9 @@ public sealed class LogParseService : ILogParseService
         return result;
     }
 
-    private TerraformOperationBlock CreateOperationBlock(string type, List<ProcessedLogsDto> entries)
+    private DTOs.LogParseService.TerraformOperationBlockDto CreateOperationBlock(string type, List<ProcessedLogsDto> entries)
     {
-        return new TerraformOperationBlock
+        return new DTOs.LogParseService.TerraformOperationBlockDto
         {
             Type = type,
             Logs = entries,
@@ -315,12 +283,8 @@ public sealed class LogParseService : ILogParseService
             StartTime = entries.First().Timestamp,
             EndTime = entries.Last().Timestamp,
             Id = Guid.NewGuid().ToString(),
-            CreatedById = "system",
-            CreatedByName = "terraform",
-            ModifiedById = "system",
-            ModifiedByName = "terraform",
-            CreatedTimeStamp = entries.First().Timestamp,
-            ModifiedTimeStamp = entries.Last().Timestamp
+            FirstTimeStamp = entries.First().Timestamp,
+            LastTimeStamp = entries.Last().Timestamp
         };
     }
 }
