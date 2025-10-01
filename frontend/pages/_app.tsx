@@ -1,6 +1,13 @@
-import '../Style/globals.css'
-import type { AppProps } from 'next/app'
+// pages/_app.tsx
+import React from "react";
+import type { AppProps } from "next/app";
+import { LogsProvider } from "../Components/LogsProvider";
+import "../Style/globals.css"; // предполагаем Tailwind подключён
 
 export default function App({ Component, pageProps }: AppProps) {
-  return <Component {...pageProps} />
+    return (
+        <LogsProvider>
+            <Component {...pageProps} />
+        </LogsProvider>
+    );
 }

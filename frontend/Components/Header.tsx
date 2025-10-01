@@ -28,6 +28,8 @@ export default function Header() {
                 <nav className="hidden md:flex gap-8 text-sm font-medium text-[var(--primary)]">
                     <Link className="hover:underline" href="/">Главная</Link>
                     <Link className="hover:underline" href="/docs">Документация</Link>
+                    <Link className="hover:underline" href="/timeline">TimeLine</Link>
+                    <Link className="hover:underline" href="/plugins">Плагины</Link>
                     <Link className="hover:underline" href="/#how">Как работать</Link>
                 </nav>
             </div>
