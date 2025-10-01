@@ -32,13 +32,29 @@ console.log(data['@message']);
                 return "bg-white border-gray-200 text-black";
         }
     }
+    const getFontColor = (status: string) => {
+        switch (data['LevelParsed']) {
+            case "Error":
+                return "text-red-800";
+            case "Warning":
+                return "text-yellow-800";
+            case "Info":
+                return "text-green-700";
+            case "Debug":
+                return "text-purple-700";
+            case "Trace":
+                return "text-blue-700";
+            default:
+                return "text-gray-800";
+        }
+    }
 
     return (
         <div className={`mb-2 p-2 rounded border ${getColor(data.LevelParsed)}`}>
             <div className="">
                 <button
                     onClick={() => setOpenMap((prev) => ({...prev, [path]: !isOpen}))}
-                    className="text-xs text-[var(--primary)] hover:underline mb-1"
+                    className={`text-sm text-[var(--primary)] hover:underline mb-1 ${getFontColor(data.LevelParsed)}`}
                 >
                     {isOpen ? "▼" : "▶"} [{data['LevelParsed'].toUpperCase()}] {data['@message']} ({data.length})
                 </button>
