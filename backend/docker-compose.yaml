@@ -3,7 +3,7 @@
     external: true
 
 services:
-  logviewer.host:
+  logviewer-host:
     container_name: logviewer-host
     build:
       context: .
