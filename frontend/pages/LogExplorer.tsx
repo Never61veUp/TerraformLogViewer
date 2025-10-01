@@ -574,15 +574,13 @@ return (
                                                                 {Object.entries(logData)
                                                                     .filter(([key]) => !key.startsWith('@') && key !== 'additionalData')
                                                                     .map(([key, value]) => (
-                                                                        <div key={key} className="mb-2 p-2 bg-white rounded border">
-                                                                            <span className="font-mono text-gray-600 mr-1">
-                                                                                {key}:
-                                                                            </span>
+
+
                                                                             <JsonViewer
                                                                                 data={value}
                                                                                 depth={0}
+                                                                                key={key}
                                                                             />
-                                                                        </div>
                                                                     ))}
                                                             </div>
 
