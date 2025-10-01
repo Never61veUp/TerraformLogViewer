@@ -4,16 +4,18 @@ using Microsoft.AspNetCore.Mvc;
 
 namespace LogViewer.Host.Controllers;
 
-public class BaseController  : ControllerBase
+public class BaseController : ControllerBase
 {
     protected IActionResult FromResult<T>(Result<T> result)
     {
         return result.IsSuccess ? Ok(result.Value) : Error(result.Error);
     }
+
     protected IActionResult FromResult(Result result)
     {
         return result.IsSuccess ? Ok(result.ToString()) : Error(result.Error);
     }
+
     protected bool TryGetUserId(out Guid id)
     {
         id = Guid.Empty;
@@ -22,6 +24,7 @@ public class BaseController  : ControllerBase
             return false;
         return true;
     }
+
     protected new IActionResult Ok()
     {
         return base.Ok(Envelope.Ok());

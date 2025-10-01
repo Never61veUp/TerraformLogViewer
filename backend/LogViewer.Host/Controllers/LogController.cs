@@ -1,8 +1,6 @@
 using System.Text.Json;
-using CSharpFunctionalExtensions;
+using System.Text.Json.Serialization;
 using LogViewer.Application.Abstractions;
-using LogViewer.Application.Commands;
-using LogViewer.Application.Services;
 using MediatR;
 using Microsoft.AspNetCore.Mvc;
 
@@ -12,32 +10,35 @@ namespace LogViewer.Host.Controllers;
 [Route("api/logs/terraform")]
 public sealed class LogController : BaseController
 {
-    private readonly ILogParseService _logParseService;
-    private readonly IMediator _mediator;
+    private readonly JsonSerializerOptions _jsonOptions = new()
+    {
+        DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
+    };
 
-    public LogController(ILogParseService logParseService, IMediator mediator)
+    private readonly ILogParseService _logParseService;
+
+    public LogController(ILogParseService logParseService)
     {
         _logParseService = logParseService;
-        _mediator = mediator;
     }
-    
+
+
     [HttpPost("upload-log-json")]
     public async Task<IActionResult> UploadJson(IFormFile file, CancellationToken cancellationToken)
     {
-        var command = new UploadJsonLogCommand { File = file };
-        var result = await _mediator.Send(command, cancellationToken);
+        var processed = await _logParseService.Load(file, cancellationToken);
+        if(processed.IsFailure)
+            return FromResult(processed);
         
-        if (result.IsSuccess)
-            return Ok();
+        return new JsonResult(processed.Value, _jsonOptions);
         
-        return BadRequest(new { error = result.Error });
     }
-    
+
     [HttpGet("get-processed-log-json")]
     public async Task<IActionResult> GetProcessedLogs(CancellationToken cancellationToken)
     {
-        var result = await _logParseService.GetProcessed(cancellationToken);
-        
-        return FromResult(result);
+        var processed = await _logParseService.GetProcessed(cancellationToken);
+        var result = JsonSerializer.Serialize(processed.Value, _jsonOptions);
+        return Ok(result);
     }
 }

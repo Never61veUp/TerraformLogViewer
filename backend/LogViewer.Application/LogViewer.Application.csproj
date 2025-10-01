@@ -7,23 +7,23 @@
     </PropertyGroup>
 
     <ItemGroup>
-      <Compile Remove="Class1.cs" />
+        <Compile Remove="Class1.cs"/>
     </ItemGroup>
 
     <ItemGroup>
-      <PackageReference Include="CSharpFunctionalExtensions" Version="3.6.0" />
-      <PackageReference Include="MediatR" Version="13.0.0" />
-      <PackageReference Include="Microsoft.AspNetCore.Http" Version="2.3.0" />
+        <PackageReference Include="CSharpFunctionalExtensions" Version="3.6.0"/>
+        <PackageReference Include="MediatR" Version="13.0.0"/>
+        <PackageReference Include="Microsoft.AspNetCore.Http" Version="2.3.0"/>
     </ItemGroup>
 
     <ItemGroup>
-      <Reference Include="Microsoft.AspNetCore.Http.Features">
-        <HintPath>..\..\..\..\..\Program Files\dotnet\shared\Microsoft.AspNetCore.App\9.0.6\Microsoft.AspNetCore.Http.Features.dll</HintPath>
-      </Reference>
+        <Reference Include="Microsoft.AspNetCore.Http.Features">
+            <HintPath>..\..\..\..\..\Program Files\dotnet\shared\Microsoft.AspNetCore.App\9.0.6\Microsoft.AspNetCore.Http.Features.dll</HintPath>
+        </Reference>
     </ItemGroup>
 
     <ItemGroup>
-      <ProjectReference Include="..\LogViewer.Core\LogViewer.Core.csproj" />
+        <ProjectReference Include="..\LogViewer.Core\LogViewer.Core.csproj"/>
     </ItemGroup>
 
 </Project>
