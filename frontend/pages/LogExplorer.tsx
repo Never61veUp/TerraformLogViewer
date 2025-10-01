@@ -144,9 +144,9 @@ export default function LogExplorer() {
         if (read.has(log.id)) return false;
 
         const matchesSearch =
-            log.message.toLowerCase().includes(searchQuery.toLowerCase()) ||
-            log.tf_req_id.toLowerCase().includes(searchQuery.toLowerCase()) ||
-            JSON.stringify(log.details).toLowerCase().includes(searchQuery.toLowerCase());
+            (log.message?.toLowerCase() ?? "").includes(searchQuery.toLowerCase()) ||
+            (log.tf_req_id?.toLowerCase() ?? "").includes(searchQuery.toLowerCase()) ||
+            (JSON.stringify(log.details ?? {})?.toLowerCase() ?? "").includes(searchQuery.toLowerCase());
 
         const matchesType = tfTypeFilter ? log.tf_resource_type === tfTypeFilter : true;
         const matchesLevel = levelFilter ? log.level === levelFilter : true;
