@@ -1,4 +1,4 @@
-const API_URL = "http://141.95.54.5:5050";
+const API_URL = "https://api.terraformlogviewer.ru/";
 
 export interface AuthResponse {
     access_token: string;
