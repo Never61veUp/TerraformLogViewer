@@ -28,7 +28,7 @@ public sealed class LogController : BaseController
         var result = await _mediator.Send(command, cancellationToken);
         
         if (result.IsSuccess)
-            return Ok();
+            return FromResult(result);
         
         return BadRequest(new { error = result.Error });
     }

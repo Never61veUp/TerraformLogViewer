@@ -88,10 +88,6 @@ public class ProcessedLogsDto
     [JsonPropertyName("tf_client_capability_write_only_attributes_allowed")]
     public bool? TfClientCapabilityWriteOnlyAttributesAllowed { get; set; }
     
-    // Различные дополнительные поля
-    [JsonPropertyName("level")]
-    public int? NumericLevel { get; set; }
-    
     // Все остальные неизвестные поля
     [JsonExtensionData]
     public Dictionary<string, object>? AdditionalData { get; set; }

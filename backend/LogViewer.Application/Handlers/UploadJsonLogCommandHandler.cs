@@ -32,9 +32,9 @@ public class UploadJsonLogCommandHandler : IRequestHandler<UploadJsonLogCommand,
             var parseResult = await _logParseService.Load(content, cancellationToken);
             
             if (parseResult.IsSuccess)
-                return Result.Success();
-            else
-                return Result.Failure(parseResult.Error);
+                return Result.Success(parseResult);
+            
+            return Result.Failure(parseResult.Error);
         }
         catch (Exception ex)
         {
