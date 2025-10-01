@@ -550,7 +550,6 @@ return (
                                                         />
                                                     </div>
                                                 </div>
-                                                <div className="mt-2">{logData?.["@message"] || "No message"}</div>
 
                                                 <AnimatePresence>
                                                     {isExpanded && logData && (
