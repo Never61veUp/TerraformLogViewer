@@ -1,4 +1,5 @@
 ﻿using System.Text.Json.Serialization;
+using LogViewer.Core.Model.Enum;
 
 namespace LogViewer.Application.DTOs;
 
@@ -91,4 +92,6 @@ public class ProcessedLogsDto
     // Все остальные неизвестные поля
     [JsonExtensionData]
     public Dictionary<string, object>? AdditionalData { get; set; }
+    public DateTimeOffset? TimestampParsed { get; set; }
+    public LogLevel LevelParsed { get; set; } = LogLevel.Unknown;
 }

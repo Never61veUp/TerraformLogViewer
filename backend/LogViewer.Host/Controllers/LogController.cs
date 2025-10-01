@@ -24,19 +24,25 @@ public sealed class LogController : BaseController
     [HttpPost("upload-log-json")]
     public async Task<IActionResult> UploadJson(IFormFile file, CancellationToken cancellationToken)
     {
-        var command = new UploadJsonLogCommand { File = file };
-        var result = await _mediator.Send(command, cancellationToken);
-        
-        if (result.IsSuccess)
-            return FromResult(result);
-        
-        return BadRequest(new { error = result.Error });
+        var logs = await _logParseService.Load(file, cancellationToken);
+        return FromResult(logs);
     }
     
     [HttpGet("get-processed-log-json")]
     public async Task<IActionResult> GetProcessedLogs(CancellationToken cancellationToken)
     {
         var result = await _logParseService.GetProcessed(cancellationToken);
+        
+        return FromResult(result);
+    }
+    [HttpPost("get-processed-log-json-test")]
+    public async Task<IActionResult> GetProcessedLogsTest(IFormFile file, CancellationToken cancellationToken)
+    {
+        await using var stream = file.OpenReadStream();
+        using var reader = new StreamReader(stream);
+        var content = await reader.ReadToEndAsync(cancellationToken);
+        var result = await _logParseService.ParseLogsAsync(content, cancellationToken);
+        
         
         return FromResult(result);
     }

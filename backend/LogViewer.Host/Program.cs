@@ -14,6 +14,7 @@ builder.Services.AddMediatR(cfg =>
 builder.Services.AddScoped<ILogParseService, LogParseService>();
 builder.Services.AddScoped<ILogLevelDetector, LogLevelDetector>();
 builder.Services.AddScoped<ITimeStampService, TimeStampService>();
+builder.Services.AddScoped<IGroupDetector, GroupDetector>();
 
 builder.Services.AddControllers();
 // Learn more about configuring OpenAPI at https://aka.ms/aspnet/openapi

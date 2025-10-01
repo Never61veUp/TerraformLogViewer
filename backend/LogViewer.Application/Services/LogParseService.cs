@@ -3,25 +3,36 @@ using System.Text.RegularExpressions;
 using CSharpFunctionalExtensions;
 using LogViewer.Application.Abstractions;
 using LogViewer.Application.DTOs;
+using LogViewer.Core.Model;
+using LogViewer.Core.Model.Enum;
+using Microsoft.AspNetCore.Http;
 
 namespace LogViewer.Application.Services;
 
 public sealed class LogParseService : ILogParseService
 {
     private readonly ITimeStampService _timeStampService;
+    private readonly ILogLevelDetector _logLevelDetector;
+    private readonly IGroupDetector _groupDetector;
 
-    public LogParseService(ITimeStampService timeStampService)
+    public LogParseService(ITimeStampService timeStampService, ILogLevelDetector logLevelDetector, IGroupDetector groupDetector)
     {
         _timeStampService = timeStampService;
+        _logLevelDetector = logLevelDetector;
+        _groupDetector = groupDetector;
     }
     public Task<Result<string>> GetProcessed(CancellationToken cancelationToken = default)
     {
         throw new NotImplementedException();
     }
     
-    public async Task<Result<Dictionary<string, List<ProcessedLogsDto>>>> Load(string log, CancellationToken cancellationToken)
+    public async Task<Result<Dictionary<string, List<ProcessedLogsDto>>>> Load(IFormFile file, CancellationToken cancellationToken)
     {
-        if (string.IsNullOrWhiteSpace(log))
+        var content = await FromFileToString(file, cancellationToken);
+        if(content.IsFailure)
+            return Result.Failure<Dictionary<string, List<ProcessedLogsDto>>>(content.Error);
+        
+        if (string.IsNullOrWhiteSpace(content.Value))
             return Result.Failure<Dictionary<string, List<ProcessedLogsDto>>>("Log content is empty or null");
 
         var logEntries = new List<ProcessedLogsDto>();
@@ -31,24 +42,31 @@ public sealed class LogParseService : ILogParseService
             PropertyNamingPolicy = JsonNamingPolicy.CamelCase
         };
         
-        using var reader = new StringReader(log);
-        string? line;
+
         int lineNumber = 0;
         int errorCount = 0;
-
-        while ((line = await reader.ReadLineAsync(cancellationToken)) != null)
+        
+        var lastLevel = LogLevel.Unknown;
+        var lines = content.Value.Split(new[] { "\r\n", "\n" }, StringSplitOptions.RemoveEmptyEntries);
+        var parsedLogs = new List<LogEntry>();
+        
+        var reader = new StringReader(content.Value);
+        string? lineStr; 
+        while ((lineStr = await reader.ReadLineAsync(cancellationToken)) != null)
         {
             lineNumber++;
 
-            if (string.IsNullOrWhiteSpace(line))
+            if (string.IsNullOrWhiteSpace(lineStr))
                 continue;
 
             try
             {
-                var logEntry = JsonSerializer.Deserialize<ProcessedLogsDto>(line, options);
+                var logEntry = JsonSerializer.Deserialize<ProcessedLogsDto>(lineStr, options);
                 if (logEntry != null)
                 {
                     logEntries.Add(logEntry);
+                    logEntry.LevelParsed = _logLevelDetector.DetectLogLevel(lineStr, lastLevel);
+                    lastLevel = logEntry.LevelParsed;
                 }
             }
             catch (JsonException jsonEx)
@@ -72,7 +90,7 @@ public sealed class LogParseService : ILogParseService
         
         Console.WriteLine($"Успешно распарсено {logEntries.Count} записей лога");
         
-        var groupedLogs = GroupLogsByOperationType(logEntries);
+        var groupedLogs = _groupDetector.GroupLogsByOperationType(logEntries);
         
         Console.WriteLine($"Plan операции: {groupedLogs["plan"].Count} записей");
         Console.WriteLine($"Apply операции: {groupedLogs["apply"].Count} записей");
@@ -80,56 +98,56 @@ public sealed class LogParseService : ILogParseService
         
         return Result.Success(groupedLogs);
     }
-
-    private Dictionary<string, List<ProcessedLogsDto>> GroupLogsByOperationType(List<ProcessedLogsDto> logEntries)
+    
+    public async Task<Result<List<LogEntry>>> ParseLogsAsync(string jsonContent, CancellationToken cancellationToken = default)
     {
-        var groups = new Dictionary<string, List<ProcessedLogsDto>>
+        var lastLevel = LogLevel.Unknown;
+        var lines = jsonContent.Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries);
+        var parsedLogs = new List<LogEntry>();
+        
+        
+        foreach (var line in lines)
         {
-            ["plan"] = new List<ProcessedLogsDto>(),
-            ["apply"] = new List<ProcessedLogsDto>(),
-            ["other"] = new List<ProcessedLogsDto>()
-        };
-
-        // Упрощенные регулярные выражения - ищем просто наличие операций в аргументах
-        var planPatterns = new[]
-        {
-            @"terraform\s+plan",  // terraform plan
-            @"starting\s+Plan\s+operation",  // starting Plan operation
-            @"CLI\s+args:[^]]*plan[^]]*\]",  // CLI args: [anything containing plan]
-            @"CLI\s+command\s+args:[^]]*plan[^]]*\]",  // CLI command args: [anything containing plan]
-            @"""plan""",  // "plan" в любом контексте CLI args
-            @"\[\s*[^]]*""plan""[^]]*\]"  // [anything containing "plan"]
-        };
-
-        var applyPatterns = new[]
-        {
-            @"terraform\s+apply",  // terraform apply
-            @"starting\s+Apply\s+operation",  // starting Apply operation
-            @"CLI\s+args:[^]]*apply[^]]*\]",  // CLI args: [anything containing apply]
-            @"CLI\s+command\s+args:[^]]*apply[^]]*\]",  // CLI command args: [anything containing apply]
-            @"""apply""",  // "apply" в любом контексте CLI args
-            @"\[\s*[^]]*""apply""[^]]*\]"  // [anything containing "apply"]
-        };
-
-        foreach (var entry in logEntries)
-        {
-            var message = entry.Message ?? "";
-            string operationType = "other";
-
-            if (planPatterns.Any(pattern => Regex.IsMatch(message, pattern, RegexOptions.IgnoreCase)))
+            cancellationToken.ThrowIfCancellationRequested();
+            var ts = _timeStampService.ExtractTimestamp(line);
+            var level = _logLevelDetector.DetectLogLevel(line, lastLevel);
+            
+            var logEntry = new LogEntry
             {
-                operationType = "plan";
-                Console.WriteLine($"PLAN DETECTED: {message}");
-            }
-            else if (applyPatterns.Any(pattern => Regex.IsMatch(message, pattern, RegexOptions.IgnoreCase)))
-            {
-                operationType = "apply";
-                Console.WriteLine($"APPLY DETECTED: {message}");
-            }
+                Raw = line,
+                Timestamp = ts,
+                Level = level
+            };
 
-            groups[operationType].Add(entry);
+            parsedLogs.Add(logEntry);
+            lastLevel = level;
         }
 
-        return groups;
+        return parsedLogs;
+    }
+
+    private async Task<Result<string>> FromFileToString(IFormFile file,
+        CancellationToken cancellationToken)
+    {
+        await using var stream = file.OpenReadStream();
+        using var reader = new StreamReader(stream);
+        var content = await reader.ReadToEndAsync(cancellationToken);
+        
+        try
+        {
+            using var stringReader = new StringReader(content);
+            string? line;
+            while ((line = stringReader.ReadLine()) != null)
+            {
+                if (string.IsNullOrWhiteSpace(line))
+                    continue;
+                JsonSerializer.Deserialize<ProcessedLogsDto>(line);
+            }
+            return Result.Success(content);
+        }
+        catch (JsonException ex)
+        {
+            return Result.Failure<string>($"Invalid JSON: {ex.Message}");
+        }
     }
 }
