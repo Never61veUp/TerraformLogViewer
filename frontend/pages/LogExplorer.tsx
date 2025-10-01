@@ -48,7 +48,7 @@ export default function LogExplorer() {
     const [actionFilter, setActionFilter] = useState("");
     const [timestampRange, setTimestampRange] = useState<[string, string] | null>(null);
 
-    const API_URL = "https://api.terraformlogviewer.ru/";
+    const API_URL = "https://api.terraformlogviewer.ru";
 
     // ======= Helpers =======
     const normalizeLevel = (level: any, message?: string): "INFO" | "WARN" | "ERROR" => {
