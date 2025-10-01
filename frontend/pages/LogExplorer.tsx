@@ -46,9 +46,9 @@ export default function LogExplorer() {
     const [tfTypeFilter, setTfTypeFilter] = useState("");
     const [levelFilter, setLevelFilter] = useState("");
     const [actionFilter, setActionFilter] = useState("");
-    const [timestampRange, setTimestampRange] = useState<[string, string] | null>(null);
+    const [timestampRange, setTimestampRange] = useState<[string | null, string | null]>([null, null]);
 
-    const API_URL = "https://api.terraformlogviewer.ru";
+    const API_URL = "http://141.95.54.5:5050";
 
     // ======= Helpers =======
     const normalizeLevel = (level: any, message?: string): "INFO" | "WARN" | "ERROR" => {
@@ -144,19 +144,30 @@ export default function LogExplorer() {
         if (read.has(log.id)) return false;
 
         const matchesSearch =
-            (log.message?.toLowerCase() ?? "").includes(searchQuery.toLowerCase()) ||
-            (log.tf_req_id?.toLowerCase() ?? "").includes(searchQuery.toLowerCase()) ||
-            (JSON.stringify(log.details ?? {})?.toLowerCase() ?? "").includes(searchQuery.toLowerCase());
+            log.message.toLowerCase().includes(searchQuery.toLowerCase()) ||
+            log.tf_req_id.toLowerCase().includes(searchQuery.toLowerCase()) ||
+            JSON.stringify(log.details).toLowerCase().includes(searchQuery.toLowerCase());
 
         const matchesType = tfTypeFilter ? log.tf_resource_type === tfTypeFilter : true;
         const matchesLevel = levelFilter ? log.level === levelFilter : true;
         const matchesAction = actionFilter ? log.action === actionFilter : true;
 
-        const matchesTimestamp =
-            timestampRange
-                ? new Date(log.timestamp) >= new Date(timestampRange[0]) &&
-                new Date(log.timestamp) <= new Date(timestampRange[1])
-                : true;
+        const matchesTimestamp = (() => {
+            if (!timestampRange) return true;
+
+            const [start, end] = timestampRange;
+            const logDate = new Date(log.timestamp);
+
+            if (start && end) {
+                return logDate >= new Date(start) && logDate <= new Date(end);
+            } else if (start) {
+                return logDate >= new Date(start);
+            } else if (end) {
+                return logDate <= new Date(end);
+            }
+
+            return true;
+        })();
 
         return matchesSearch && matchesType && matchesLevel && matchesAction && matchesTimestamp;
     });
@@ -287,20 +298,14 @@ export default function LogExplorer() {
                                     type="date"
                                     className="px-3 py-2 border rounded-lg"
                                     onChange={(e) =>
-                                        setTimestampRange((prev) => [
-                                            e.target.value,
-                                            prev ? prev[1] : e.target.value,
-                                        ])
+                                        setTimestampRange((prev) => [e.target.value || null, prev ? prev[1] : null])
                                     }
                                 />
                                 <input
                                     type="date"
                                     className="px-3 py-2 border rounded-lg"
                                     onChange={(e) =>
-                                        setTimestampRange((prev) => [
-                                            prev ? prev[0] : e.target.value,
-                                            e.target.value,
-                                        ])
+                                        setTimestampRange((prev) => [prev ? prev[0] : null, e.target.value || null])
                                     }
                                 />
                             </div>
