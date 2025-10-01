@@ -4,5 +4,5 @@ namespace LogViewer.Application.Abstractions;
 
 public interface ILogLevelDetector
 {
-    LogLevel DetectLogLevel(string line, LogLevel previousLevel);
+    LogLevel DetectLogLevel(string line);
 }

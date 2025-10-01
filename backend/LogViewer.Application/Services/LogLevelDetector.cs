@@ -5,7 +5,7 @@ namespace LogViewer.Application.Services;
 
 public sealed class LogLevelDetector : ILogLevelDetector
 {
-    public LogLevel DetectLogLevel(string line, LogLevel previousLevel)
+    public LogLevel DetectLogLevel(string line)
     {
         var lower = line.ToLower();
         var scores = new Dictionary<LogLevel, double>
@@ -31,7 +31,7 @@ public sealed class LogLevelDetector : ILogLevelDetector
         var maxScore = scores.MaxBy(kv => kv.Value);
 
         if (maxScore.Value == 0)
-            return previousLevel;
+            scores[LogLevel.Error] += 0.8;
 
         return maxScore.Key;
     }

@@ -43,7 +43,6 @@ public sealed class LogParseService : ILogParseService
 
         var logEntries = new List<ProcessedLogsDto>();
         var errorCount = 0;
-        var lastLevel = LogLevel.Unknown;
 
         await using var stream = file.OpenReadStream();
         using var reader = new StreamReader(stream);
@@ -62,9 +61,8 @@ public sealed class LogParseService : ILogParseService
                 if (logEntry == null)
                     continue;
 
-                logEntry.LevelParsed = _logLevelDetector.DetectLogLevel(line, lastLevel);
+                logEntry.LevelParsed = _logLevelDetector.DetectLogLevel(line);
                 logEntry.TimestampParsed = _timeStampService.ExtractTimestamp(line);
-                lastLevel = logEntry.LevelParsed;
 
                 logEntries.Add(logEntry);
             }
