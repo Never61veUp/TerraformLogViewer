@@ -9,6 +9,7 @@ import {
     Loader2,
     Filter,
     Group,
+    X,
 } from "lucide-react";
 import Header from "../Components/Header";
 import Footer from "../Components/Footer";
@@ -21,7 +22,7 @@ interface LogEntry {
     level: "INFO" | "WARN" | "ERROR";
     message: string;
     details?: object;
-    tf_resource_type?: string;
+    tf_resource_type: string;
 }
 
 export default function LogExplorer() {
@@ -40,8 +41,8 @@ export default function LogExplorer() {
         "idle"
     );
     const [grouped, setGrouped] = useState(false);
+    const [filtersOpen, setFiltersOpen] = useState(false);
 
-    // Защищённая нормализация уровня логов
     const normalizeLevel = (level: any): "INFO" | "WARN" | "ERROR" => {
         if (typeof level !== "string") return "INFO";
         const upper = level.toUpperCase();
@@ -49,12 +50,10 @@ export default function LogExplorer() {
         return "INFO";
     };
 
-    // Нормализация действия
     const normalizeAction = (action: any): "plan" | "apply" => {
         return action === "apply" ? "apply" : "plan";
     };
 
-    // Загрузка
     const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
         if (!file) return;
@@ -88,7 +87,7 @@ export default function LogExplorer() {
                         level: normalizeLevel(log.level),
                         message: log.message || "",
                         details: log.details || log,
-                        tf_resource_type: log.tf_resource_type || "",
+                        tf_resource_type: log.tf_resource_type || "—",
                     }));
                     setLogs(normalized);
                     setStatus("done");
@@ -109,13 +108,14 @@ export default function LogExplorer() {
         });
     };
 
-    // Фильтрация логов
     const filteredLogs = logs.filter((log) => {
         const matchesSearch =
             log.message.toLowerCase().includes(search.toLowerCase()) ||
             log.tf_req_id.toLowerCase().includes(search.toLowerCase());
         const matchesResource = filters.tf_resource_type
-            ? log.tf_resource_type === filters.tf_resource_type
+            ?log.tf_resource_type
+                .toLowerCase()
+                .includes(filters.tf_resource_type.toLowerCase())
             : true;
         const ts = new Date(log.timestamp).getTime();
         const fromOk = filters.from ? ts >= new Date(filters.from).getTime() : true;
@@ -130,7 +130,6 @@ export default function LogExplorer() {
         );
     });
 
-    // Группировка
     const groupedLogs = grouped
         ? Object.values(
             filteredLogs.reduce<Record<string, LogEntry[]>>((acc, log) => {
@@ -141,137 +140,71 @@ export default function LogExplorer() {
         )
         : [filteredLogs];
 
+    const activeFiltersCount =
+        (filters.tf_resource_type ? 1 : 0) +
+        (filters.from ? 1 : 0) +
+        (filters.to ? 1 : 0) +
+        filters.levels.length +
+        filters.sections.length;
+
     return (
         <>
             <Header />
             <main className="pt-28 px-6 max-w-7xl mx-auto">
                 <h1 className="text-3xl font-bold mb-6">Log Explorer</h1>
 
-                {/* Загрузка файла и группировка */}
-                <div className="mb-6 flex flex-wrap gap-4 items-center">
-                    <label className="flex items-center gap-2 px-4 py-2 border rounded-lg cursor-pointer hover:bg-[var(--secondary)]/30">
-                        <Upload className="w-5 h-5" />
-                        <span>Загрузить JSON</span>
-                        <input
-                            type="file"
-                            accept="application/json"
-                            className="hidden"
-                            onChange={handleFileUpload}
-                        />
-                    </label>
+                <div className="mb-6 flex flex-wrap justify-between items-center">
+                    <div className="flex gap-4">
 
+                        <label className="h-11 px-4 py-2 flex items-center gap-2 rounded-lg border bg-white hover:bg-gray-100 cursor-pointer transition">
+                            {status === "loading" ? (
+                                <Loader2 className="w-5 h-5 animate-spin text-[var(--primary)]" />
+                            ) : (
+                                <Upload className="w-5 h-5 text-[var(--primary)]" />
+                            )}
+                            <span>
+                {status === "loading" ? "Загрузка..." : "Загрузить JSON"}
+              </span>
+                            <input
+                                type="file"
+                                accept="application/json"
+                                className="hidden"
+                                onChange={handleFileUpload}
+                            />
+                        </label>
+
+                        <button
+                            onClick={() => setGrouped((g) => !g)}
+                            className={`h-11 px-4 py-2 flex items-center gap-2 rounded-lg border transition ${
+                                grouped
+                                    ? "bg-[var(--primary)] text-white border-[var(--primary)]"
+                                    : "bg-white hover:bg-gray-100"
+                            }`}
+                        >
+                            <Group className="w-5 h-5" />
+                            {grouped ? "Группировка включена" : "Группировать по tf_req_id"}
+                        </button>
+                    </div>
+
+                    {/* фильтры */}
                     <button
-                        onClick={() => setGrouped((g) => !g)}
-                        className={`flex items-center gap-2 px-4 py-2 rounded-lg border ${
-                            grouped ? "bg-[var(--primary)] text-white" : "hover:bg-gray-100"
-                        }`}
+                        onClick={() => setFiltersOpen(true)}
+                        className="relative h-11 px-4 py-2 flex items-center gap-2 rounded-lg border bg-white hover:bg-gray-100 transition"
                     >
-                        <Group className="w-5 h-5" />
-                        {grouped ? "Группировка включена" : "Группировать по tf_req_id"}
+                        <Filter className="w-5 h-5 text-[var(--primary)]" />
+                        Фильтры
+                        {activeFiltersCount > 0 && (
+                            <span className="absolute -top-2 -right-2 bg-[var(--primary)] text-white text-xs font-bold px-2 py-0.5 rounded-full shadow">
+                {activeFiltersCount}
+              </span>
+                        )}
                     </button>
                 </div>
 
-                {/* Панель фильтров */}
+                {/* поиски */}
                 {logs.length > 0 && (
-                    <div className="mb-6 p-4 rounded-xl border bg-white/60 backdrop-blur shadow-sm">
-                        <div className="flex items-center gap-2 mb-4">
-                            <Filter className="w-5 h-5 text-[var(--primary)]" />
-                            <span className="font-semibold text-gray-700">Фильтры</span>
-                        </div>
+                    <div className="mb-6 grid grid-cols-1 md:grid-cols-2 gap-4">
 
-                        <div className="flex flex-wrap gap-8">
-                            {/* Уровни логов */}
-                            <div>
-                <span className="block text-sm font-medium text-gray-600 mb-2">
-                  Log Levels
-                </span>
-                                <div className="flex gap-3 flex-wrap">
-                                    {Array.from(new Set(logs.map((log) => log.level))).map((lvl) => {
-                                        const colors =
-                                            lvl === "INFO"
-                                                ? "bg-green-100 text-green-700 border-green-300"
-                                                : lvl === "WARN"
-                                                    ? "bg-yellow-100 text-yellow-700 border-yellow-300"
-                                                    : "bg-red-100 text-red-700 border-red-300";
-                                        const active = filters.levels.includes(lvl);
-                                        return (
-                                            <button
-                                                key={lvl}
-                                                onClick={() =>
-                                                    setFilters((f) => ({
-                                                        ...f,
-                                                        levels: active
-                                                            ? f.levels.filter((x) => x !== lvl)
-                                                            : [...f.levels, lvl],
-                                                    }))
-                                                }
-                                                className={`px-3 py-1.5 text-xs font-semibold rounded-full border transition ${
-                                                    active
-                                                        ? colors
-                                                        : "bg-gray-100 text-gray-500 border-gray-300 hover:bg-gray-200"
-                                                }`}
-                                            >
-                                                {lvl}
-                                            </button>
-                                        );
-                                    })}
-                                </div>
-                            </div>
-
-                            {/* Секции */}
-                            <div>
-                <span className="block text-sm font-medium text-gray-600 mb-2">
-                  Sections
-                </span>
-                                <div className="flex gap-3">
-                                    {["plan", "apply"].map((sec) => {
-                                        const active = filters.sections.includes(sec);
-                                        return (
-                                            <button
-                                                key={sec}
-                                                onClick={() =>
-                                                    setFilters((f) => ({
-                                                        ...f,
-                                                        sections: active
-                                                            ? f.sections.filter((x) => x !== sec)
-                                                            : [...f.sections, sec],
-                                                    }))
-                                                }
-                                                className={`px-3 py-1.5 text-xs font-semibold rounded-full border transition ${
-                                                    active
-                                                        ? "bg-[var(--primary)] text-white border-[var(--primary)]"
-                                                        : "bg-gray-100 text-gray-500 border-gray-300 hover:bg-gray-200"
-                                                }`}
-                                            >
-                                                {sec}
-                                            </button>
-                                        );
-                                    })}
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                )}
-
-                {/* Статус */}
-                {status === "loading" && (
-                    <div className="flex items-center gap-2 text-[var(--primary)] mb-6">
-                        <Loader2 className="w-5 h-5 animate-spin" />
-                        <span>Анализ файла...</span>
-                    </div>
-                )}
-                {status === "done" && (
-                    <p className="text-green-600 mb-6">
-                        ✅ Файл успешно загружен и проанализирован
-                    </p>
-                )}
-                {status === "error" && (
-                    <p className="text-red-600 mb-6">❌ Ошибка анализа файла</p>
-                )}
-
-                {/* Поиск */}
-                {logs.length > 0 && (
-                    <div className="mb-6 grid grid-cols-1 md:grid-cols-4 gap-4">
                         <div className="flex items-center rounded-lg border px-3 bg-[var(--background)]">
                             <Search className="w-4 h-4 text-[var(--primary)] mr-2" />
                             <input
@@ -283,35 +216,26 @@ export default function LogExplorer() {
                             />
                         </div>
 
-                        <input
-                            type="text"
-                            placeholder="tf_resource_type"
-                            value={filters.tf_resource_type}
-                            onChange={(e) =>
-                                setFilters((f) => ({ ...f, tf_resource_type: e.target.value }))
-                            }
-                            className="rounded-lg border px-3 py-2 bg-[var(--background)]"
-                        />
 
-                        <input
-                            type="datetime-local"
-                            value={filters.from}
-                            onChange={(e) =>
-                                setFilters((f) => ({ ...f, from: e.target.value }))
-                            }
-                            className="rounded-lg border px-3 py-2 bg-[var(--background)]"
-                        />
-
-                        <input
-                            type="datetime-local"
-                            value={filters.to}
-                            onChange={(e) => setFilters((f) => ({ ...f, to: e.target.value }))}
-                            className="rounded-lg border px-3 py-2 bg-[var(--background)]"
-                        />
+                        <div className="flex items-center rounded-lg border px-3 bg-[var(--background)]">
+                            <Search className="w-4 h-4 text-[var(--primary)] mr-2" />
+                            <input
+                                type="text"
+                                placeholder="Поиск по tf_resource_type..."
+                                value={filters.tf_resource_type}
+                                onChange={(e) =>
+                                    setFilters((f) => ({
+                                        ...f,
+                                        tf_resource_type: e.target.value,
+                                    }))
+                                }
+                                className="flex-1 py-2 bg-transparent outline-none"
+                            />
+                        </div>
                     </div>
                 )}
 
-                {/* Логи */}
+                {/* логи */}
                 {logs.length === 0 ? (
                     <p className="text-gray-400">Загрузите JSON с логами для анализа.</p>
                 ) : (
@@ -336,9 +260,10 @@ export default function LogExplorer() {
                                                     ? "opacity-50 border-gray-300"
                                                     : "border-[var(--primary)]/30"
                                             }`}
-                                            onClick={() => setExpanded(isExpanded ? null : log.id)}
+                                            onClick={() =>
+                                                setExpanded(isExpanded ? null : log.id)
+                                            }
                                         >
-                                            {/* Заголовок */}
                                             <div className="flex items-center justify-between">
                                                 <div className="flex items-center gap-3 flex-wrap">
                           <span
@@ -364,12 +289,16 @@ export default function LogExplorer() {
                                                     <span className="text-sm font-mono text-gray-600">
                             {log.timestamp}
                           </span>
-                                                    {log.tf_resource_type && (
-                                                        <span className="text-xs px-2 py-1 rounded bg-gray-200 text-gray-800">
-                              {log.tf_resource_type}
-                            </span>
-                                                    )}
-                                                    <span className="text-xs text-gray-500">ID: {log.id}</span>
+                                                    {/* tf_req_id и tf_resource_type рядом */}
+                                                    <span className="text-xs px-2 py-1 rounded bg-gray-200 text-gray-800">
+                            req_id: {log.tf_req_id}
+                          </span>
+                                                    <span className="text-xs px-2 py-1 rounded bg-gray-200 text-gray-800">
+                            type: {log.tf_resource_type}
+                          </span>
+                                                    <span className="text-xs text-gray-500">
+                            ID: {log.id}
+                          </span>
                                                 </div>
 
                                                 <div className="flex items-center gap-2">
@@ -382,7 +311,9 @@ export default function LogExplorer() {
                                                     >
                                                         <CheckCircle
                                                             className={`w-5 h-5 ${
-                                                                isRead ? "text-[var(--primary)]" : "text-gray-400"
+                                                                isRead
+                                                                    ? "text-[var(--primary)]"
+                                                                    : "text-gray-400"
                                                             }`}
                                                         />
                                                     </button>
@@ -394,10 +325,10 @@ export default function LogExplorer() {
                                                 </div>
                                             </div>
 
-                                            {/* Сообщение */}
+                                            {/* сообщение */}
                                             <div className="mt-2">{log.message}</div>
 
-                                            {/* Детали JSON */}
+                                            {/* детали JSON */}
                                             <AnimatePresence>
                                                 {isExpanded && log.details && (
                                                     <motion.pre
@@ -419,6 +350,144 @@ export default function LogExplorer() {
                 )}
             </main>
             <Footer />
+
+            {/* боковая панель фильтров */}
+            <AnimatePresence>
+                {filtersOpen && (
+                    <>
+                        <motion.div
+                            className="fixed inset-0 bg-black/40 z-40"
+                            initial={{ opacity: 0 }}
+                            animate={{ opacity: 1 }}
+                            exit={{ opacity: 0 }}
+                            onClick={() => setFiltersOpen(false)}
+                        />
+                        <motion.div
+                            className="fixed top-0 right-0 h-full w-full sm:w-[400px] bg-white shadow-lg z-50 flex flex-col"
+                            initial={{ x: "100%" }}
+                            animate={{ x: 0 }}
+                            exit={{ x: "100%" }}
+                            transition={{ type: "spring", stiffness: 300, damping: 30 }}
+                        >
+
+                            <div className="flex items-center justify-between px-4 py-3 border-b">
+                                <h2 className="text-lg font-semibold">Фильтры</h2>
+                                <button onClick={() => setFiltersOpen(false)}>
+                                    <X className="w-5 h-5" />
+                                </button>
+                            </div>
+
+                            <div className="p-4 flex-1 overflow-y-auto space-y-6">
+                                {/* уровни */}
+                                <div>
+                                    <p className="text-sm font-medium mb-2">Уровни логов</p>
+                                    <div className="flex gap-2 flex-wrap">
+                                        {Array.from(new Set(logs.map((log) => log.level))).map(
+                                            (lvl) => {
+                                                const active = filters.levels.includes(lvl);
+                                                return (
+                                                    <button
+                                                        key={lvl}
+                                                        onClick={() =>
+                                                            setFilters((f) => ({
+                                                                ...f,
+                                                                levels: active
+                                                                    ? f.levels.filter((x) => x !== lvl)
+                                                                    : [...f.levels, lvl],
+                                                            }))
+                                                        }
+                                                        className={`px-3 py-1 text-xs rounded-full border ${
+                                                            active
+                                                                ? "bg-[var(--primary)] text-white border-[var(--primary)]"
+                                                                : "bg-gray-100 text-gray-500 border-gray-300 hover:bg-gray-200"
+                                                        }`}
+                                                    >
+                                                        {lvl}
+                                                    </button>
+                                                );
+                                            }
+                                        )}
+                                    </div>
+                                </div>
+
+                                {/* секции */}
+                                <div>
+                                    <p className="text-sm font-medium mb-2">Секции</p>
+                                    <div className="flex gap-2">
+                                        {["plan", "apply"].map((sec) => {
+                                            const active = filters.sections.includes(sec);
+                                            return (
+                                                <button
+                                                    key={sec}
+                                                    onClick={() =>
+                                                        setFilters((f) => ({
+                                                            ...f,
+                                                            sections: active
+                                                                ? f.sections.filter((x) => x !== sec)
+                                                                : [...f.sections, sec],
+                                                        }))
+                                                    }
+                                                    className={`px-3 py-1 text-xs rounded-full border ${
+                                                        active
+                                                            ? "bg-[var(--primary)] text-white border-[var(--primary)]"
+                                                            : "bg-gray-100 text-gray-500 border-gray-300 hover:bg-gray-200"
+                                                    }`}
+                                                >
+                                                    {sec}
+                                                </button>
+                                            );
+                                        })}
+                                    </div>
+                                </div>
+
+                                {/* даты */}
+                                <div className="space-y-3">
+                                    <input
+                                        type="datetime-local"
+                                        value={filters.from}
+                                        onChange={(e) =>
+                                            setFilters((f) => ({ ...f, from: e.target.value }))
+                                        }
+                                        className="w-full rounded-lg border px-3 py-2 text-sm bg-gray-50"
+                                    />
+                                    <input
+                                        type="datetime-local"
+                                        value={filters.to}
+                                        onChange={(e) =>
+                                            setFilters((f) => ({ ...f, to: e.target.value }))
+                                        }
+                                        className="w-full rounded-lg border px-3 py-2 text-sm bg-gray-50"
+                                    />
+                                </div>
+                            </div>
+
+                            {/* кнопки */}
+                            <div className="p-4 border-t flex justify-between">
+                                <button
+                                    onClick={() =>
+                                        setFilters({
+                                            tf_resource_type: "",
+                                            from: "",
+                                            to: "",
+                                            levels: [],
+                                            sections: [],
+                                        })
+                                    }
+                                    className="px-4 py-2 rounded-lg border bg-gray-100 hover:bg-gray-200 text-sm"
+                                >
+                                    Сбросить
+                                </button>
+                                <button
+                                    onClick={() => setFiltersOpen(false)}
+                                    className="px-4 py-2 rounded-lg bg-[var(--primary)] text-white text-sm"
+                                >
+                                    Применить
+                                </button>
+                            </div>
+                        </motion.div>
+                    </>
+                )}
+            </AnimatePresence>
         </>
     );
 }
