@@ -19,5 +19,5 @@ services:
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.logviewer.rule=Host(`ugcsggcgsocgkooc4o8gok8c.141.95.54.5.sslip.io`)"
-      - "traefik.http.routers.logviewer.entrypoints=websecure"
-      - "traefik.http.routers.logviewer.tls.certresolver=myresolver"
+      - "traefik.http.routers.logviewer.entrypoints=https"
+      - "traefik.http.routers.logviewer.tls.certresolver=letsencrypt"
