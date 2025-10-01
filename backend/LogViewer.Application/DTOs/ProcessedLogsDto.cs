@@ -10,7 +10,7 @@ public class ProcessedLogsDto
 
     [JsonPropertyName("@message")] public string Message { get; set; } = string.Empty;
 
-    [JsonPropertyName("@timestamp")] public DateTime Timestamp { get; set; }
+    [JsonPropertyName("@timestamp")] public DateTimeOffset Timestamp { get; set; }
 
     // Модули и компоненты
     [JsonPropertyName("@module")] public string? Module { get; set; }
