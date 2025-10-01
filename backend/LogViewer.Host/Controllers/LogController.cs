@@ -22,6 +22,7 @@ public sealed class LogController : BaseController
         _logParseService = logParseService;
     }
 
+
     [HttpPost("upload-log-json")]
     public async Task<IActionResult> UploadJson(IFormFile file, CancellationToken cancellationToken)
     {
