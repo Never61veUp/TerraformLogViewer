@@ -16,7 +16,7 @@ public sealed class LogLevelDetector : ILogLevelDetector
             { LogLevel.Debug, 0 },
             { LogLevel.Trace, 0 }
         };
-        
+
         if (lower.Contains("panic:") || lower.Contains("[error]") || lower.Contains("error"))
             scores[LogLevel.Error] += 0.8;
         if (lower.Contains("[warn]") || lower.Contains("warning"))
@@ -27,12 +27,12 @@ public sealed class LogLevelDetector : ILogLevelDetector
             scores[LogLevel.Debug] += 0.1;
         if (lower.Contains("[trace]") || lower.Contains("trace"))
             scores[LogLevel.Trace] += 0.05;
-        
+
         var maxScore = scores.MaxBy(kv => kv.Value);
-        
+
         if (maxScore.Value == 0)
             return previousLevel;
-        
+
         return maxScore.Key;
     }
 }

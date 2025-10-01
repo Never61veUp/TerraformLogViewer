@@ -1,6 +1,6 @@
 using LogViewer.Application.DTOs;
 
-namespace LogViewer.Application.Services;
+namespace LogViewer.Application.Abstractions;
 
 public interface IGroupDetector
 {

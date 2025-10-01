@@ -1,6 +1,7 @@
 using LogViewer.Core.Model.Enum;
 
 namespace LogViewer.Core.Model;
+
 public enum TerraformSection
 {
     Unknown,
@@ -9,6 +10,7 @@ public enum TerraformSection
     Destroy,
     Error
 }
+
 public sealed class LogEntry
 {
     public string Raw { get; set; } = string.Empty;
