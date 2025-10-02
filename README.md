@@ -16,3 +16,34 @@ git clone https://github.com/Never61veUp/TerraformLogViewer.git
 cd TerraformLogViewer
 Запуск backend: cd backend && npm install && npm run dev
 Запуск frontend: cd frontend && npm install && npm run dev
+
+1️⃣ Клонирование репозитория
+Открой терминал и клонируй репозиторий:
+
+```bash 
+ git clone https://github.com/Never61veUp/TerraformLogViewer.git
+```
+```bash
+cd TerraformLogViewer/backend
+
+2️⃣ Установка Docker и Docker Compose
+
+Docker Desktop: https://www.docker.com/products/docker-desktop
+
+После установки убедитесь, что Docker и Compose работают:
+
+``
+docker --version
+docker-compose --version ```bash
+
+3 Сборка и запуск контейнеров
+
+В TerraformLogViewer/backen выполните:
+
+docker-compose up --build
+
+После сборки:
+
+API доступен на http://localhost:5050
+
+Frontend доступен на http://localhost:3000
