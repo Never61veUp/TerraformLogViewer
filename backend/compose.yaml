@@ -1,4 +1,8 @@
-﻿services:
+﻿networks:
+  logviewer-net:
+    driver: bridge
+    
+services:
   logviewer.host:
     container_name: logviewer-host
     build:
@@ -9,3 +13,17 @@
     environment:
       - ASPNETCORE_ENVIRONMENT=Production
       - ASPNETCORE_URLS=http://+:5050
+
+  logviewer.next:
+    container_name: logviewer-next
+    build:
+      context: ../frontend
+      dockerfile: Dockerfile
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=production
+    depends_on:
+      - logviewer.host
+    networks:
+      - logviewer-net
