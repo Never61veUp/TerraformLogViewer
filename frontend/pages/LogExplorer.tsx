@@ -44,6 +44,14 @@ interface TerraformOperationBlockDto {
     startTime: Date;
     endTime: Date;
     id: string;
+    // Добавляем подсчет уровней логирования
+    logLevelCounts?: {
+        trace: number;
+        debug: number;
+        info: number;
+        warn: number;
+        error: number;
+    };
 }
 
 // Детали лога, соответствующие C# ProcessedLogsDto
@@ -117,6 +125,14 @@ interface TfReqGroup {
     allLogs: ProcessedLogsDto[];
     rpcType: string;
     duration: number;
+    // Добавляем подсчет уровней логирования
+    logLevelCounts?: {
+        trace: number;
+        debug: number;
+        info: number;
+        warn: number;
+        error: number;
+    };
 }
 
 export default function LogExplorer() {
@@ -205,6 +221,77 @@ export default function LogExplorer() {
         return null;
     };
 
+    // ======= Функция для подсчета уровней логирования =======
+    const countLogLevels = (logs: ProcessedLogsDto[]): {
+        trace: number;
+        debug: number;
+        info: number;
+        warn: number;
+        error: number;
+    } => {
+        const counts = {
+            trace: 0,
+            debug: 0,
+            info: 0,
+            warn: 0,
+            error: 0,
+        };
+
+        logs?.forEach((log: ProcessedLogsDto) => {
+            const level = (log.levelParsed || log["@level"] || "unknown").toLowerCase();
+
+            switch (level) {
+                case LogLevel.Trace:
+                case "trace":
+                    counts.trace++;
+                    break;
+                case LogLevel.Debug:
+                case "debug":
+                    counts.debug++;
+                    break;
+                case LogLevel.Info:
+                case "info":
+                    counts.info++;
+                    break;
+                case LogLevel.Warn:
+                case "warn":
+                    counts.warn++;
+                    break;
+                case LogLevel.Error:
+                case "error":
+                    counts.error++;
+                    break;
+            }
+        });
+
+        return counts;
+    };
+
+    // ======= Функция для получения цвета блока/группы =======
+    const getBlockColor = (logLevelCounts?: { error: number }) => {
+        // Если есть ошибки - красный цвет
+        if (logLevelCounts?.error && logLevelCounts.error > 0) {
+            return "border-red-400 bg-red-50";
+        }
+        // Базовый цвет по умолчанию
+        return "border-gray-300 bg-white";
+    };
+
+    // ======= Функция для получения цвета левой границы блока =======
+    const getBlockBorderColor = (logLevelCounts?: { error: number }, type?: string, rpcType?: string) => {
+        // Если есть ошибки - красная граница
+        if (logLevelCounts?.error && logLevelCounts.error > 0) {
+            return "border-l-4 border-red-400";
+        }
+        // Иначе используем стандартные цвета по типу
+        if (type === "plan") return "border-l-4 border-blue-400";
+        if (type === "apply") return "border-l-4 border-purple-400";
+        if (rpcType) {
+            return "border-l-4";
+        }
+        return "border-l-4 border-gray-200";
+    };
+
     // ======= File Upload =======
     const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
@@ -231,10 +318,8 @@ export default function LogExplorer() {
                 const data = await res.json();
 
                 if (Array.isArray(data)) {
-                    const normalized: TerraformOperationBlockDto[] = data.map((block: any) => ({
-                        id: block.Id || block.id,
-                        type: block.Type || block.type || "other",
-                        logs: (block.Logs || block.logs || []).map((log: any) => ({
+                    const normalized: TerraformOperationBlockDto[] = data.map((block: any) => {
+                        const logs = (block.Logs || block.logs || []).map((log: any) => ({
                             // Основные системные поля
                             "@level": log["@level"],
                             "@message": log["@message"],
@@ -286,11 +371,21 @@ export default function LogExplorer() {
                             
                             // Все остальные поля
                             ...log
-                            })),
+                        }));
+
+                        // Добавляем подсчет уровней логирования
+                        const logLevelCounts = countLogLevels(logs);
+
+                        return {
+                            id: block.Id || block.id,
+                            type: block.Type || block.type || "other",
+                            logs: logs,
                             logCount: block.LogCount || block.logCount || 0,
                             startTime: new Date(block.StartTime || block.startTime || block.FirstTimeStamp),
                             endTime: new Date(block.EndTime || block.endTime || block.LastTimeStamp),
-                    }));
+                            logLevelCounts: logLevelCounts, // Добавляем подсчет уровней
+                        };
+                    });
                     setLogs(normalized);
                     setStatus("done");
                 } else {
@@ -383,6 +478,8 @@ export default function LogExplorer() {
         // Рассчитываем длительность для каждой группы
         Array.from(groupsMap.values()).forEach(group => {
             group.duration = group.endTime.getTime() - group.startTime.getTime();
+            // Добавляем подсчет уровней логирования для группы
+            group.logLevelCounts = countLogLevels(group.allLogs);
         });
 
         // Сортируем по времени начала (хронологический порядок)
@@ -470,10 +567,65 @@ export default function LogExplorer() {
         );
     };
 
+    // Кастомная точка для ScatterChart
+    const CustomScatter = (props: any) => {
+        const { cx, cy, x, y, payload, width } = props;
+
+        return (
+            <Rectangle
+                x={cx - width / 2}
+                y={cy - 5}
+                width={Math.max(width, 2)}
+                height={10}
+                fill={getColorByRpcType(payload.rpcType)}
+                stroke="#333"
+                strokeWidth={0.5}
+                radius={2}
+            />
+        );
+    };
+
     // Кастомный тултип для диаграммы Ганта
     const CustomTooltip = ({ active, payload, label }: any) => {
         if (active && payload && payload.length) {
             const data = payload[0].payload;
+
+            // Подсчитываем логи по уровням
+            const logLevelCounts = {
+                trace: 0,
+                debug: 0,
+                info: 0,
+                warn: 0,
+                error: 0,
+            };
+
+            // Проходим по всем логам в группе
+            data.allLogs?.forEach((log: ProcessedLogsDto) => {
+                const level = (log.levelParsed || log["@level"] || "unknown").toLowerCase();
+
+                switch (level) {
+                    case LogLevel.Trace:
+                    case "trace":
+                        logLevelCounts.trace++;
+                        break;
+                    case LogLevel.Debug:
+                    case "debug":
+                        logLevelCounts.debug++;
+                        break;
+                    case LogLevel.Info:
+                    case "info":
+                        logLevelCounts.info++;
+                        break;
+                    case LogLevel.Warn:
+                    case "warn":
+                        logLevelCounts.warn++;
+                        break;
+                    case LogLevel.Error:
+                    case "error":
+                        logLevelCounts.error++;
+                        break;
+                }
+            });
 
             return (
                 <div className="bg-white p-4 border border-gray-300 rounded-lg shadow-lg">
@@ -483,6 +635,27 @@ export default function LogExplorer() {
                     <p><strong>End:</strong> {formatDateTimeWithMs(data.endTime)}</p>
                     <p><strong>Duration:</strong> {data.duration}ms</p>
                     <p><strong>Log Count:</strong> {data.logCount}</p>
+
+                    <div className="mt-2 pt-2 border-t border-gray-200">
+                        <p className="font-semibold mb-1">Log Levels:</p>
+                        <div className="grid grid-cols-2 gap-1 text-sm">
+                            {logLevelCounts.trace > 0 && (
+                                <p className="text-gray-500">Trace: {logLevelCounts.trace}</p>
+                            )}
+                            {logLevelCounts.debug > 0 && (
+                                <p className="text-blue-600">Debug: {logLevelCounts.debug}</p>
+                            )}
+                            {logLevelCounts.info > 0 && (
+                                <p className="text-green-600">Info: {logLevelCounts.info}</p>
+                            )}
+                            {logLevelCounts.warn > 0 && (
+                                <p className="text-yellow-600">Warn: {logLevelCounts.warn}</p>
+                            )}
+                            {logLevelCounts.error > 0 && (
+                                <p className="text-red-600">Error: {logLevelCounts.error}</p>
+                            )}
+                        </div>
+                    </div>
                 </div>
             );
         }
@@ -503,26 +676,9 @@ export default function LogExplorer() {
             rpcType: group.rpcType,
             tf_req_id: group.tf_req_id,
             name: group.tf_req_id,
+            allLogs: group.allLogs, // Добавляем allLogs для доступа в тултипе
         }));
     }, [getGroupedByTfReqId]);
-
-    // Кастомная точка для ScatterChart
-    const CustomScatter = (props: any) => {
-        const { cx, cy, x, y, payload, width } = props;
-        
-        return (
-            <Rectangle
-                x={cx - width / 2}
-                y={cy - 5}
-                width={Math.max(width, 2)}
-                height={10}
-                fill={getColorByRpcType(payload.rpcType)}
-                stroke="#333"
-                strokeWidth={0.5}
-                radius={2}
-            />
-        );
-    };
 
     // Функция для форматирования временной оси
     const timeFormatter = (timestamp: number) => {
@@ -582,6 +738,49 @@ export default function LogExplorer() {
 
         });
 
+    // Фильтрация для TfReqGroup
+    const filteredGroups = useMemo(() => {
+        return getGroupedByTfReqId.filter(group => {
+            return group.allLogs.some(log => {
+                const matchesSearch =
+                    (log["@message"]?.toLowerCase().includes(searchQuery.toLowerCase()) ?? false) ||
+                    (log.tf_req_id?.toLowerCase().includes(searchQuery.toLowerCase()) ?? false) ||
+                    JSON.stringify(log).toLowerCase().includes(searchQuery.toLowerCase());
+
+                const matchesType = tfTypeFilter
+                    ? log.tf_resource_type?.toLowerCase() === tfTypeFilter.toLowerCase()
+                    : true;
+
+                const matchesLevel = levelFilter
+                    ? log["@level"]?.toLowerCase() === levelFilter.toLowerCase()
+                    : true;
+
+                const matchesAction = actionFilter
+                    ? log.tf_rpc === actionFilter
+                    : true;
+
+                const matchesTimestamp = (() => {
+                    if (!timestampRange) return true;
+                    const [start, end] = timestampRange;
+                    const groupStart = group.startTime;
+                    const groupEnd = group.endTime;
+
+                    if (start && end) {
+                        const startDate = new Date(start);
+                        const endDate = new Date(end);
+                        return groupStart <= endDate && groupEnd >= startDate;
+                    } else if (start) {
+                        return groupEnd >= new Date(start);
+                    } else if (end) {
+                        return groupStart <= new Date(end);
+                    }
+                    return true;
+                })();
+
+                return matchesSearch && matchesType && matchesLevel && matchesAction && matchesTimestamp;
+            });
+        });
+    }, [getGroupedByTfReqId, searchQuery, tfTypeFilter, levelFilter, actionFilter, timestampRange]);
 
     // Функция для получения краткого описания лога
     const getLogSummary = (log: ProcessedLogsDto) => {
@@ -594,7 +793,7 @@ export default function LogExplorer() {
         return `${timestamp} - ${msg}${resource}`;
     };
 
-    // Группировка логов (добавьте этот код в ваш компонент)
+    // Группировка логов по старой модели (TerraformOperationBlockDto)
     const groupedLogs: TerraformOperationBlockDto[][] = grouped
         ? Array.from(
             filteredLogs.reduce<Map<string, TerraformOperationBlockDto[]>>((map, operationBlock) => {
@@ -609,7 +808,7 @@ export default function LogExplorer() {
         )
         : [filteredLogs.sort((a, b) => new Date(a.startTime).getTime() - new Date(b.startTime).getTime())];
 
-    // Timeline data (также добавьте эту переменную)
+    // Timeline data
     const timelineData = filteredLogs.map((operationBlock) => {
         // Берем данные из первого лога в блоке или используем значения по умолчанию
         const firstLog = operationBlock.logs?.[0];
@@ -685,6 +884,193 @@ const sortByReadAndTime = (a: TerraformOperationBlockDto, b: TerraformOperationB
                     </AnimatePresence>
                 )}
             </div>
+        );
+    };
+
+    // ======== Рендер группы TfReqGroup ========
+    const renderTfReqGroup = (group: TfReqGroup) => {
+        const isExpanded = expanded === group.tf_req_id;
+        const isRead = read.has(group.tf_req_id);
+
+        return (
+            <motion.div
+                key={group.tf_req_id}
+                layout
+                className={`rounded-xl border p-4 transition cursor-pointer ${isRead ? "opacity-50" : ""} ${getBlockColor(group.logLevelCounts)} ${getBlockBorderColor(group.logLevelCounts, undefined, group.rpcType)}`}
+                onClick={() => setExpanded(isExpanded ? null : group.tf_req_id)}
+            >
+                <div className="flex items-center justify-between flex-wrap gap-2">
+                    <div className="flex items-center gap-3 flex-wrap">
+                        <span
+                            className="text-xs font-bold px-2 py-1 rounded text-white"
+                            style={{ backgroundColor: getColorByRpcType(group.rpcType) }}
+                        >
+                            {group.rpcType || "UNKNOWN"}
+                        </span>
+                        <span className="text-sm font-mono text-gray-600">
+                            {group.startTime.toLocaleString()}
+                        </span>
+                        <span className="text-xs px-2 py-1 rounded bg-gray-200 text-gray-800">
+                            logs: {group.logCount}
+                        </span>
+                        <span className="text-xs px-2 py-1 rounded bg-gray-200 text-gray-800">
+                            duration: {group.duration}ms
+                        </span>
+                        <span className="text-xs px-2 py-1 rounded bg-blue-200 text-blue-800">
+                            tf_req_id: {group.tf_req_id}
+                        </span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                        <button
+                            onClick={(e) => {
+                                e.stopPropagation();
+                                toggleRead(group.tf_req_id);
+                            }}
+                            className="p-1 hover:text-[var(--primary)]"
+                        >
+                            <CheckCircle
+                                className={`w-5 h-5 ${isRead ? "text-[var(--primary)]" : "text-gray-400"}`}
+                            />
+                        </button>
+                        <ChevronDown
+                            className={`w-5 h-5 transition ${isExpanded ? "rotate-180" : ""}`}
+                        />
+                    </div>
+                </div>
+
+                <div className="mt-2 text-sm text-gray-700">
+                    {group.allLogs[0] ? getLogSummary(group.allLogs[0]) : "No message"}
+                </div>
+
+                {/* Отображение уровней логирования для группы */}
+                {group.logLevelCounts && (
+                    <div className="flex flex-wrap gap-1 mt-2">
+                        {group.logLevelCounts.trace > 0 && (
+                            <span className="inline-flex items-center px-2 py-0.5 rounded text-xs bg-gray-100 text-gray-700">
+                                <span className="w-2 h-2 rounded-full bg-gray-400 mr-1"></span>
+                                Trace: {group.logLevelCounts.trace}
+                            </span>
+                        )}
+                        {group.logLevelCounts.debug > 0 && (
+                            <span className="inline-flex items-center px-2 py-0.5 rounded text-xs bg-blue-100 text-blue-700">
+                                <span className="w-2 h-2 rounded-full bg-blue-500 mr-1"></span>
+                                Debug: {group.logLevelCounts.debug}
+                            </span>
+                        )}
+                        {group.logLevelCounts.info > 0 && (
+                            <span className="inline-flex items-center px-2 py-0.5 rounded text-xs bg-green-100 text-green-700">
+                                <span className="w-2 h-2 rounded-full bg-green-500 mr-1"></span>
+                                Info: {group.logLevelCounts.info}
+                            </span>
+                        )}
+                        {group.logLevelCounts.warn > 0 && (
+                            <span className="inline-flex items-center px-2 py-0.5 rounded text-xs bg-yellow-100 text-yellow-700">
+                                <span className="w-2 h-2 rounded-full bg-yellow-500 mr-1"></span>
+                                Warn: {group.logLevelCounts.warn}
+                            </span>
+                        )}
+                        {group.logLevelCounts.error > 0 && (
+                            <span className="inline-flex items-center px-2 py-0.5 rounded text-xs bg-red-100 text-red-700">
+                                <span className="w-2 h-2 rounded-full bg-red-500 mr-1"></span>
+                                Error: {group.logLevelCounts.error}
+                            </span>
+                        )}
+                    </div>
+                )}
+
+                <AnimatePresence>
+                    {isExpanded && (
+                        <motion.div
+                            initial={{ opacity: 0, height: 0 }}
+                            animate={{ opacity: 1, height: "auto" }}
+                            exit={{ opacity: 0, height: 0 }}
+                            className="mt-3 rounded bg-gray-50 border text-sm overflow-x-auto"
+                            onClick={(e) => e.stopPropagation()}
+                        >
+                            <div className="font-bold mb-3">Подробнее о группе:</div>
+                            <div className="grid grid-cols-2 gap-1 mb-3 p-3 bg-green-50 rounded-lg border border-green-200">
+                                <div><strong>tf_req_id:</strong> {group.tf_req_id}</div>
+                                <div><strong>RPC Type:</strong> {group.rpcType}</div>
+                                <div><strong>Время начала:</strong> {group.startTime.toLocaleString()}</div>
+                                <div><strong>Время конца:</strong> {group.endTime.toLocaleString()}</div>
+                                <div><strong>Кол-во логов:</strong> {group.logCount}</div>
+                                <div><strong>Длительность:</strong> {group.duration}ms</div>
+                                <div><strong>Кол-во операций:</strong> {group.operations.length}</div>
+                            </div>
+
+                            <div className="font-bold mb-3">Логи группы ({group.allLogs.length}):</div>
+                            <div className="mb-4 p-3 bg-gray-50 rounded-lg border border-gray-200 space-y-4">
+                                {group.allLogs.map((log, logIndex) => {
+                                    const isLogExpanded = expandedLogs.has(`${group.tf_req_id}-${logIndex}`);
+
+                                    return (
+                                        <div key={logIndex} className="border-b pb-3 last:border-b-0">
+                                            {/* Заголовок лога с кнопкой раскрытия */}
+                                            <div
+                                                className="font-semibold mb-2 text-gray-700 cursor-pointer hover:bg-gray-100 p-2 rounded flex justify-between items-center"
+                                                onClick={() => toggleLogExpansion(`${group.tf_req_id}-${logIndex}`)}
+                                            >
+                                                <div>
+                                                    Лог #{logIndex + 1}
+                                                    {log["@timestamp"] && ` - ${new Date(log["@timestamp"]).toLocaleTimeString()}`}
+                                                    {log["@level"] && ` [${log["@level"]}]`}
+                                                    {log.tf_resource_type && ` - ${log.tf_resource_type}`}
+                                                </div>
+                                                <ChevronDown
+                                                    className={`w-4 h-4 transition-transform ${isLogExpanded ? "rotate-180" : ""}`}
+                                                />
+                                            </div>
+
+                                            {/* Раскрывающееся содержимое лога */}
+                                            <AnimatePresence>
+                                                {isLogExpanded && (
+                                                    <motion.div
+                                                        initial={{ opacity: 0, height: 0 }}
+                                                        animate={{ opacity: 1, height: "auto" }}
+                                                        exit={{ opacity: 0, height: 0 }}
+                                                        className="overflow-hidden"
+                                                    >
+                                                        <div className="space-y-2 pl-4 border-l-2 border-gray-300 ml-2">
+                                                            {/* Системные поля (@timestamp, @level, @message и т.д.) */}
+                                                            <div className="mt-3 p-3 bg-green-50 rounded-lg border border-green-200 space-y-2">
+                                                                <div className="font-bold text-sm mb-2 text-green-800">System Fields:</div>
+                                                                {Object.entries(log)
+                                                                    .filter(([key]) => key.startsWith('@'))
+                                                                    .map(([key, value]) => (
+                                                                        <div key={`${logIndex}-system-${key}`} className="flex">
+                                                                            <span className="font-mono text-gray-600 mr-2 min-w-[120px]">{key}:</span>
+                                                                            <span className="text-gray-800">{value?.toString()}</span>
+                                                                        </div>
+                                                                    ))}
+                                                            </div>
+                                                            {/* Основные поля лога */}
+                                                            {Object.entries(log)
+                                                                .filter(([key]) => !key.startsWith('@') && key !== 'additionalData')
+                                                                .map(([key, value]) => (
+                                                                    <LogRow key={`${logIndex}-${key}`} keyName={key} value={value} parentId={group.tf_req_id} />
+                                                                ))}
+
+                                                            {/* Additional Data */}
+                                                            {log.additionalData && Object.keys(log.additionalData).length > 0 && (
+                                                                <div className="mt-3 p-3 bg-blue-50 rounded-lg border border-blue-200 space-y-2">
+                                                                    <div className="font-bold text-sm mb-2 text-blue-800">Additional Data:</div>
+                                                                    {Object.entries(log.additionalData).map(([key, value]) => (
+                                                                        <LogRow key={`${logIndex}-additional-${key}`} keyName={key} value={value} parentId={group.tf_req_id} />
+                                                                    ))}
+                                                                </div>
+                                                            )}
+                                                        </div>
+                                                    </motion.div>
+                                                )}
+                                            </AnimatePresence>
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                        </motion.div>
+                    )}
+                </AnimatePresence>
+            </motion.div>
         );
     };
 
@@ -805,18 +1191,23 @@ const sortByReadAndTime = (a: TerraformOperationBlockDto, b: TerraformOperationB
                             <p className="text-gray-400">Загрузите JSON для анализа.</p>
                         ) : (
                             <div className="space-y-6">
-                                {groupedLogs.map((group, i) => (
-                                    <div key={i} className="space-y-4">
-                                        {grouped && (
-                                            <h2 className="text-lg font-semibold">
-                                                Группа tf_req_id: {group[0]?.logs?.[0]?.tf_req_id || group[0]?.id}
-                                            </h2>
-                                        )}
-                                        {group.map((operationBlock) => {
-                                            const isExpanded = expanded === operationBlock.id;
-                                            const isRead = read.has(operationBlock.id);
-                                            const logData = operationBlock.logs;
-                                            const firstLog = logData?.[0];
+                                {grouped ? (
+                                    // Отображение по TfReqGroup
+                                    filteredGroups.map((group) => renderTfReqGroup(group))
+                                ) : (
+                                    // Отображение по TerraformOperationBlockDto (старый способ)
+                                    groupedLogs.map((group, i) => (
+                                        <div key={i} className="space-y-4">
+                                            {grouped && (
+                                                <h2 className="text-lg font-semibold">
+                                                    Группа tf_req_id: {group[0]?.logs?.[0]?.tf_req_id || group[0]?.id}
+                                                </h2>
+                                            )}
+                                            {group.map((operationBlock) => {
+                                                const isExpanded = expanded === operationBlock.id;
+                                                const isRead = read.has(operationBlock.id);
+                                                const logData = operationBlock.logs;
+                                                const firstLog = logData?.[0];
 
                                             return (
 
@@ -824,45 +1215,45 @@ const sortByReadAndTime = (a: TerraformOperationBlockDto, b: TerraformOperationB
 
                                                     key={operationBlock.id}
                                                     layout
-                                                    className={`rounded-xl border p-4 transition cursor-pointer ${isRead ? "opacity-50 border-gray-300" : `border-l-4 ${operationBlock.type === "plan" ? "border-blue-400" : operationBlock.type === "apply" ? "border-purple-400" : "border-gray-200"}`}`}
+                                                    className={`rounded-xl border p-4 transition cursor-pointer ${isRead ? "opacity-50 " : ""} ${getBlockColor(operationBlock.logLevelCounts)} ${getBlockBorderColor(operationBlock.logLevelCounts, operationBlock.type)}`}
                                                     onClick={() => setExpanded(isExpanded ? null : operationBlock.id)}
                                                 >
 
-                                                    <div className="flex items-center justify-between flex-wrap gap-2">
-                                                        <div className="flex items-center gap-3 flex-wrap">
-                                                            <span className={`text-xs font-bold px-2 py-1 rounded ${firstLog?.["@level"] === "info" || !firstLog?.["@level"] ? "bg-green-100 text-green-800" : firstLog?.["@level"] === "warn" ? "bg-yellow-100 text-yellow-800" : "bg-red-100 text-red-800"}`}>
-                                                                {operationBlock?.type?.toUpperCase() || "UNKNOWN"}
-                                                            </span>
-                                                            <span className="text-sm font-mono text-gray-600">
-                                                                {new Date(operationBlock.startTime).toLocaleString()}
-                                                            </span>
-                                                            <span className="text-xs px-2 py-1 rounded bg-gray-200 text-gray-800">
-                                                                logs: {operationBlock.logCount || logData?.length || 0}
-                                                            </span>
-                                                            <span className="text-xs px-2 py-1 rounded bg-gray-200 text-gray-800">
-                                                                duration: {firstLog?.tf_req_duration_ms || (new Date(operationBlock.endTime).getTime() - new Date(operationBlock.startTime).getTime())}ms
-                                                            </span>
-                                                        </div>
-                                                        <div className="flex items-center gap-2">
-                                                            <button
-                                                                onClick={(e) => {
-                                                                    e.stopPropagation();
-                                                                    toggleRead(operationBlock.id);
-                                                                }}
-                                                                className="p-1 hover:text-[var(--primary)]"
-                                                            >
-                                                                <CheckCircle
-                                                                    className={`w-5 h-5 ${isRead ? "text-[var(--primary)]" : "text-gray-400"}`}
+                                                        <div className="flex items-center justify-between flex-wrap gap-2">
+                                                            <div className="flex items-center gap-3 flex-wrap">
+                                                                <span className={`text-xs font-bold px-2 py-1 rounded ${firstLog?.["@level"] === "info" || !firstLog?.["@level"] ? "bg-green-100 text-green-800" : firstLog?.["@level"] === "warn" ? "bg-yellow-100 text-yellow-800" : "bg-red-100 text-red-800"}`}>
+                                                                    {operationBlock?.type?.toUpperCase() || "UNKNOWN"}
+                                                                </span>
+                                                                <span className="text-sm font-mono text-gray-600">
+                                                                    {new Date(operationBlock.startTime).toLocaleString()}
+                                                                </span>
+                                                                <span className="text-xs px-2 py-1 rounded bg-gray-200 text-gray-800">
+                                                                    logs: {operationBlock.logCount || logData?.length || 0}
+                                                                </span>
+                                                                <span className="text-xs px-2 py-1 rounded bg-gray-200 text-gray-800">
+                                                                    duration: {(new Date(operationBlock.endTime).getTime() - new Date(operationBlock.startTime).getTime())}ms
+                                                                </span>
+                                                            </div>
+                                                            <div className="flex items-center gap-2">
+                                                                <button
+                                                                    onClick={(e) => {
+                                                                        e.stopPropagation();
+                                                                        toggleRead(operationBlock.id);
+                                                                    }}
+                                                                    className="p-1 hover:text-[var(--primary)]"
+                                                                >
+                                                                    <CheckCircle
+                                                                        className={`w-5 h-5 ${isRead ? "text-[var(--primary)]" : "text-gray-400"}`}
+                                                                    />
+                                                                </button>
+                                                                <ChevronDown
+                                                                    className={`w-5 h-5 transition ${isExpanded ? "rotate-180" : ""}`}
                                                                 />
-                                                            </button>
-                                                            <ChevronDown
-                                                                className={`w-5 h-5 transition ${isExpanded ? "rotate-180" : ""}`}
-                                                            />
+                                                            </div>
                                                         </div>
-                                                    </div>
 
-                                                    <div className="mt-2 text-sm text-gray-700">
-                                                        {operationBlock && operationBlock.logs && operationBlock.logs.length > 0 ? (
+                                                        <div className="mt-2 text-sm text-gray-700">
+                                                            {operationBlock && operationBlock.logs && operationBlock.logs.length > 0 ? (
                                                             <>
                                                                 <span className="font-bold">[{operationBlock.logs[0]!["@level"]}]</span>{" "}
                                                                 {operationBlock.logs[0]!["@message"]}
@@ -870,9 +1261,43 @@ const sortByReadAndTime = (a: TerraformOperationBlockDto, b: TerraformOperationB
                                                         ) : (
                                                             "No message"
                                                         )}
-                                                    </div>
+                                                        </div>
 
-                                                    <AnimatePresence>
+                                                        {/* Отображение уровней логирования для блока */}
+                                                        {operationBlock.logLevelCounts && (
+                                                            <div className="flex flex-wrap gap-1 mt-2">
+                                                                {operationBlock.logLevelCounts.trace > 0 && (
+                                                                    <span className="inline-flex items-center px-2 py-0.5 rounded text-xs bg-gray-100 text-gray-700">
+                                                                        <span className="w-2 h-2 rounded-full bg-gray-400 mr-1"></span>
+                                                                        Trace: {operationBlock.logLevelCounts.trace}
+                                                                    </span>
+                                                                )}
+                                                                {operationBlock.logLevelCounts.debug > 0 && (
+                                                                    <span className="inline-flex items-center px-2 py-0.5 rounded text-xs bg-blue-100 text-blue-700">
+                                                                        <span className="w-2 h-2 rounded-full bg-blue-500 mr-1"></span>
+                                                                        Debug: {operationBlock.logLevelCounts.debug}
+                                                                    </span>
+                                                                )}
+                                                                {operationBlock.logLevelCounts.info > 0 && (
+                                                                    <span className="inline-flex items-center px-2 py-0.5 rounded text-xs bg-green-100 text-green-700">
+                                                                        <span className="w-2 h-2 rounded-full bg-green-500 mr-1"></span>
+                                                                        Info: {operationBlock.logLevelCounts.info}
+                                                                    </span>
+                                                                )}
+                                                                {operationBlock.logLevelCounts.warn > 0 && (
+                                                                    <span className="inline-flex items-center px-2 py-0.5 rounded text-xs bg-yellow-100 text-yellow-700">
+                                                                        <span className="w-2 h-2 rounded-full bg-yellow-500 mr-1"></span>
+                                                                        Warn: {operationBlock.logLevelCounts.warn}
+                                                                    </span>
+                                                                )}
+                                                                {operationBlock.logLevelCounts.error > 0 && (
+                                                                    <span className="inline-flex items-center px-2 py-0.5 rounded text-xs bg-red-100 text-red-700">
+                                                                        <span className="w-2 h-2 rounded-full bg-red-500 mr-1"></span>
+                                                                        Error: {operationBlock.logLevelCounts.error}
+                                                                    </span>
+                                                                )}
+                                                            </div>
+                                                        )}<AnimatePresence>
                                                         {isExpanded && logData && (
                                                             <motion.div
                                                                 initial={{ opacity: 0, height: 0 }}
@@ -903,7 +1328,7 @@ const sortByReadAndTime = (a: TerraformOperationBlockDto, b: TerraformOperationB
 
                                                                             {/* Additional Data */}
                                                                             {logData && Object.keys(logData).length > 0 && (
-                                                                                <div className="mt-4 p-3 rounded-lg ">
+                                                                                    <div className="mt-4 p-3 rounded-lg ">
                                                                                     <div className="font-bold text-sm mb-2 text-blue-800">ЛОГИ:</div>
                                                                                     {Object.entries(logData).map(([key, value]) => (
 
@@ -920,14 +1345,15 @@ const sortByReadAndTime = (a: TerraformOperationBlockDto, b: TerraformOperationB
                                                                         </motion.div>
                                                                     )}
                                                                 </AnimatePresence>
-                                                            </motion.div>
-                                                        )}
-                                                    </AnimatePresence>
-                                                </motion.div>
-                                            );
-                                        })}
-                                    </div>
-                                ))}
+                                                                </motion.div>
+                                                            )}
+                                                        </AnimatePresence>
+                                                    </motion.div>
+                                                );
+                                            })}
+                                        </div>
+                                    ))
+                                )}
                             </div>
                         )}
                     </div>
@@ -1019,36 +1445,108 @@ const sortByReadAndTime = (a: TerraformOperationBlockDto, b: TerraformOperationB
                         </div>
                     )}
 
-                    {/* Детальный список групп */}
-                    {ganttData.length > 0 && (
-                        <div className="bg-white p-6 rounded-lg border shadow-sm">
-                            <h3 className="text-lg font-bold mb-4">Детали групп</h3>
-                            <div className="space-y-3 max-h-96 overflow-y-auto">
-                                {getGroupedByTfReqId.map((group, index) => (
-                                    <div key={group.tf_req_id} className="p-3 border rounded-lg hover:bg-gray-50">
-                                        <div className="flex justify-between items-start">
-                                            <div>
-                                                <p className="font-mono text-sm">{group.tf_req_id}</p>
-                                                <p className="text-xs text-gray-600">
-                                                    {group.startTime.toLocaleString()} - {group.endTime.toLocaleString()}
-                                                </p>
-                                            </div>
-                                            <div className="text-right">
-                                                <span 
-                                                    className="px-2 py-1 rounded text-xs text-white font-medium"
-                                                    style={{ backgroundColor: getColorByRpcType(group.rpcType) }}
-                                                >
-                                                    {group.rpcType}
-                                                </span>
-                                                <p className="text-xs text-gray-600 mt-1">
-                                                    {group.logCount} логов, {group.duration}ms
-                                                </p>
-                                            </div>
-                                        </div>
-                                    </div>
-                                ))}
+{/* Детальный список групп */}
+{ganttData.length > 0 && (
+    <div className="bg-white p-6 rounded-lg border shadow-sm">
+        <h3 className="text-lg font-bold mb-4">Детали групп</h3>
+        <div className="space-y-3 max-h-96 overflow-y-auto">
+            {getGroupedByTfReqId.map((group, index) => {
+                // Подсчитываем логи по уровням для каждой группы
+                const logLevelCounts = {
+                    trace: 0,
+                    debug: 0,
+                    info: 0,
+                    warn: 0,
+                    error: 0,
+                };
+
+                group.allLogs?.forEach((log: ProcessedLogsDto) => {
+                    const level = (log.levelParsed || log["@level"] || "unknown").toLowerCase();
+
+                    switch (level) {
+                        case LogLevel.Trace:
+                        case "trace":
+                            logLevelCounts.trace++;
+                            break;
+                        case LogLevel.Debug:
+                        case "debug":
+                            logLevelCounts.debug++;
+                            break;
+                        case LogLevel.Info:
+                        case "info":
+                            logLevelCounts.info++;
+                            break;
+                        case LogLevel.Warn:
+                        case "warn":
+                            logLevelCounts.warn++;
+                            break;
+                        case LogLevel.Error:
+                        case "error":
+                            logLevelCounts.error++;
+                            break;
+                    }
+                });
+
+                return (
+                    <div key={group.tf_req_id} className="p-3 border rounded-lg hover:bg-gray-50">
+                        <div className="flex justify-between items-start mb-2">
+                            <div className="flex-1">
+                                <p className="font-mono text-sm">{group.tf_req_id}</p>
+                                <p className="text-xs text-gray-600">
+                                    {group.startTime.toLocaleString()} - {group.endTime.toLocaleString()}
+                                </p>
+                            </div>
+                            <div className="text-right">
+                                <span
+                                    className="px-2 py-1 rounded text-xs text-white font-medium"
+                                    style={{ backgroundColor: getColorByRpcType(group.rpcType) }}
+                                >
+                                    {group.rpcType}
+                                </span>
+                                <p className="text-xs text-gray-600 mt-1">
+                                    {group.logCount} логов, {group.duration}ms
+                                </p>
                             </div>
                         </div>
+
+                                        {/* Информация об уровнях логов */}
+                                        <div className="flex flex-wrap gap-2 mt-2 pt-2 border-t border-gray-200">
+                                            {logLevelCounts.trace > 0 && (
+                                                <span className="inline-flex items-center px-2 py-0.5 rounded text-xs bg-gray-100 text-gray-700">
+                                                    <span className="w-2 h-2 rounded-full bg-gray-400 mr-1"></span>
+                                                    Trace: {logLevelCounts.trace}
+                                                </span>
+                                            )}
+                                            {logLevelCounts.debug > 0 && (
+                                                <span className="inline-flex items-center px-2 py-0.5 rounded text-xs bg-blue-100 text-blue-700">
+                                                    <span className="w-2 h-2 rounded-full bg-blue-500 mr-1"></span>
+                                                    Debug: {logLevelCounts.debug}
+                                                </span>
+                                            )}
+                                            {logLevelCounts.info > 0 && (
+                                                <span className="inline-flex items-center px-2 py-0.5 rounded text-xs bg-green-100 text-green-700">
+                                                    <span className="w-2 h-2 rounded-full bg-green-500 mr-1"></span>
+                                                    Info: {logLevelCounts.info}
+                                                </span>
+                                            )}
+                                            {logLevelCounts.warn > 0 && (
+                                                <span className="inline-flex items-center px-2 py-0.5 rounded text-xs bg-yellow-100 text-yellow-700">
+                                                    <span className="w-2 h-2 rounded-full bg-yellow-500 mr-1"></span>
+                                                    Warn: {logLevelCounts.warn}
+                                                </span>
+                                            )}
+                                            {logLevelCounts.error > 0 && (
+                                                <span className="inline-flex items-center px-2 py-0.5 rounded text-xs bg-red-100 text-red-700">
+                                                    <span className="w-2 h-2 rounded-full bg-red-500 mr-1"></span>
+                                                    Error: {logLevelCounts.error}
+                                                </span>
+                                            )}
+                                        </div>
+                                    </div>
+                                );
+                            })}
+                        </div>
+                    </div>
                     )}
                 </div>
             )}
