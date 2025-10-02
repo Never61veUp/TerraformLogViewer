@@ -1,6 +1,6 @@
 "use client";
-import React, { useState } from "react";
-import { motion, AnimatePresence } from "framer-motion";
+import React, {useState} from "react";
+import {motion, AnimatePresence} from "framer-motion";
 import {
     ChevronDown,
     CheckCircle,
@@ -144,7 +144,7 @@ export default function LogExplorer() {
                 const text = event.target?.result as string;
 
                 const formData = new FormData();
-                const blob = new Blob([text], { type: "application/json" });
+                const blob = new Blob([text], {type: "application/json"});
                 formData.append("file", blob, file.name);
 
                 const res = await fetch(`${API_URL}/api/logs/terraform/upload-log-json`, {
@@ -223,38 +223,41 @@ export default function LogExplorer() {
     const filteredLogs = logs.filter((operationBlock) => {
         if (read.has(operationBlock.id)) return false;
 
-        const logData = operationBlock.logs;
-        if (!logData) return false;
+        const logArray = operationBlock.logs;
+        if (!Array.isArray(logArray) || logArray.length === 0) return false;
 
-        const matchesSearch =
-            (logData["@message"]?.toLowerCase().includes(searchQuery.toLowerCase()) ?? false) ||
-            (logData.tf_req_id?.toLowerCase().includes(searchQuery.toLowerCase()) ?? false) ||
-            JSON.stringify(logData).toLowerCase().includes(searchQuery.toLowerCase());
+        return logArray.some((log) => {
+            const matchesSearch =
+                (log["@message"]?.toLowerCase().includes(searchQuery.toLowerCase()) ?? false) ||
+                (log.tf_req_id?.toLowerCase().includes(searchQuery.toLowerCase()) ?? false) ||
+                JSON.stringify(log).toLowerCase().includes(searchQuery.toLowerCase());
 
-        const matchesType = tfTypeFilter ? logData.tf_resource_type === tfTypeFilter : true;
-        const matchesLevel = levelFilter ? logData["@level"] === levelFilter : true;
-        const matchesAction = actionFilter ? logData.tf_rpc === actionFilter : true;
+            const matchesType = tfTypeFilter ? log.tf_resource_type === tfTypeFilter : true;
+            const matchesLevel = levelFilter ? log["@level"]?.toLowerCase() === levelFilter.toLowerCase() : true;
+            const matchesAction = actionFilter ? log.tf_rpc === actionFilter : true;
 
-        const matchesTimestamp = (() => {
-            if (!timestampRange) return true;
-            const [start, end] = timestampRange;
-            const operationStart = new Date(operationBlock.startTime);
-            const operationEnd = new Date(operationBlock.endTime);
+            const matchesTimestamp = (() => {
+                if (!timestampRange) return true;
+                const [start, end] = timestampRange;
+                const operationStart = new Date(operationBlock.startTime);
+                const operationEnd = new Date(operationBlock.endTime);
 
-            if (start && end) {
-                const startDate = new Date(start);
-                const endDate = new Date(end);
-                return operationStart <= endDate && operationEnd >= startDate;
-            } else if (start) {
-                return operationEnd >= new Date(start);
-            } else if (end) {
-                return operationStart <= new Date(end);
-            }
-            return true;
-        })();
+                if (start && end) {
+                    const startDate = new Date(start);
+                    const endDate = new Date(end);
+                    return operationStart <= endDate && operationEnd >= startDate;
+                } else if (start) {
+                    return operationEnd >= new Date(start);
+                } else if (end) {
+                    return operationStart <= new Date(end);
+                }
+                return true;
+            })();
 
-        return matchesSearch && matchesType && matchesLevel && matchesAction && matchesTimestamp;
+            return matchesSearch && matchesType && matchesLevel && matchesAction && matchesTimestamp;
+        });
     });
+
 
     const groupedLogs: TerraformOperationBlockDto[][] = grouped
         ? Array.from(
@@ -290,7 +293,7 @@ export default function LogExplorer() {
     };
 
     // ======== компонент для раскрытия строк объектов ========
-    const LogRow: React.FC<{ keyName: string; value: any; parentId: string }> = ({ keyName, value, parentId }) => {
+    const LogRow: React.FC<{ keyName: string; value: any; parentId: string }> = ({keyName, value, parentId}) => {
         const [expandedRow, setExpandedRow] = useState(false);
         const isObject = typeof value === "object" && value !== null;
 
@@ -315,12 +318,12 @@ export default function LogExplorer() {
                     <AnimatePresence>
                         {expandedRow && (
                             <motion.div
-                                initial={{ opacity: 0, height: 0 }}
-                                animate={{ opacity: 1, height: "auto" }}
-                                exit={{ opacity: 0, height: 0 }}
+                                initial={{opacity: 0, height: 0}}
+                                animate={{opacity: 1, height: "auto"}}
+                                exit={{opacity: 0, height: 0}}
                                 className="p-2 bg-gray-50 border rounded overflow-x-auto"
                             >
-                                <JsonViewer data={value} depth={0} />
+                                <JsonViewer data={value} depth={0}/>
                             </motion.div>
                         )}
                     </AnimatePresence>
@@ -331,7 +334,7 @@ export default function LogExplorer() {
 
     return (
         <>
-            <Header />
+            <Header/>
             <main className="pt-28 px-6 max-w-7xl mx-auto">
                 <h1 className="text-3xl font-bold mb-6">Log Explorer</h1>
 
@@ -356,11 +359,12 @@ export default function LogExplorer() {
                         {/* Панель загрузки и фильтров */}
                         <div className="mb-6 flex flex-wrap justify-between items-center gap-4">
                             <div className="flex gap-4 flex-wrap">
-                                <label className="h-11 px-4 py-2 flex items-center gap-2 rounded-lg border bg-white hover:bg-gray-100 cursor-pointer transition">
+                                <label
+                                    className="h-11 px-4 py-2 flex items-center gap-2 rounded-lg border bg-white hover:bg-gray-100 cursor-pointer transition">
                                     {status === "loading" ? (
-                                        <Loader2 className="w-5 h-5 animate-spin text-[var(--primary)]" />
+                                        <Loader2 className="w-5 h-5 animate-spin text-[var(--primary)]"/>
                                     ) : (
-                                        <Upload className="w-5 h-5 text-[var(--primary)]" />
+                                        <Upload className="w-5 h-5 text-[var(--primary)]"/>
                                     )}
                                     <span>
                                         {status === "loading" ? "Загрузка..." : "Загрузить JSON"}
@@ -377,7 +381,7 @@ export default function LogExplorer() {
                                     onClick={() => setGrouped((g) => !g)}
                                     className={`h-11 px-4 py-2 flex items-center gap-2 rounded-lg border transition ${grouped ? "bg-[var(--primary)] text-white border-[var(--primary)]" : "bg-white hover:bg-gray-100"}`}
                                 >
-                                    <Group className="w-5 h-5" />
+                                    <Group className="w-5 h-5"/>
                                     {grouped ? "Группировка включена" : "Группировать по tf_req_id"}
                                 </button>
                             </div>
@@ -463,25 +467,31 @@ export default function LogExplorer() {
                                                 >
                                                     <div className="flex items-center justify-between flex-wrap gap-2">
                                                         <div className="flex items-center gap-3 flex-wrap">
-                                                            <span className={`text-xs font-bold px-2 py-1 rounded ${logData?.["@level"] === "info" || !logData?.["@level"] ? "bg-green-100 text-green-800" : logData?.["@level"] === "warn" ? "bg-yellow-100 text-yellow-800" : "bg-red-100 text-red-800"}`}>
+                                                            <span
+                                                                className={`text-xs font-bold px-2 py-1 rounded ${logData?.["@level"] === "info" || !logData?.["@level"] ? "bg-green-100 text-green-800" : logData?.["@level"] === "warn" ? "bg-yellow-100 text-yellow-800" : "bg-red-100 text-red-800"}`}>
                                                                 {operationBlock?.type?.toUpperCase() || "UNKNOWN"}
                                                             </span>
-                                                            <span className={`text-xs px-2 py-1 rounded ${operationBlock.type === "plan" ? "bg-blue-100 text-blue-800" : operationBlock.type === "apply" ? "bg-purple-100 text-purple-800" : "bg-gray-100 text-gray-800"}`}>
+                                                            <span
+                                                                className={`text-xs px-2 py-1 rounded ${operationBlock.type === "plan" ? "bg-blue-100 text-blue-800" : operationBlock.type === "apply" ? "bg-purple-100 text-purple-800" : "bg-gray-100 text-gray-800"}`}>
                                                                 {operationBlock.type}
                                                             </span>
                                                             <span className="text-sm font-mono text-gray-600">
                                                                 {new Date(operationBlock.startTime).toLocaleString()}
                                                             </span>
-                                                            <span className="text-xs px-2 py-1 rounded bg-gray-200 text-gray-800">
+                                                            <span
+                                                                className="text-xs px-2 py-1 rounded bg-gray-200 text-gray-800">
                                                                 req_id: {logData?.tf_req_id || "N/A"}
                                                             </span>
-                                                            <span className="text-xs px-2 py-1 rounded bg-gray-200 text-gray-800">
+                                                            <span
+                                                                className="text-xs px-2 py-1 rounded bg-gray-200 text-gray-800">
                                                                 type: {logData?.tf_resource_type || "N/A"}
                                                             </span>
-                                                            <span className="text-xs px-2 py-1 rounded bg-gray-200 text-gray-800">
+                                                            <span
+                                                                className="text-xs px-2 py-1 rounded bg-gray-200 text-gray-800">
                                                                 logs: {operationBlock.logCount}
                                                             </span>
-                                                            <span className="text-xs px-2 py-1 rounded bg-gray-200 text-gray-800">
+                                                            <span
+                                                                className="text-xs px-2 py-1 rounded bg-gray-200 text-gray-800">
                                                                 duration: {logData?.tf_req_duration_ms || (new Date(operationBlock.endTime).getTime() - new Date(operationBlock.startTime).getTime())}
                                                             </span>
                                                         </div>
@@ -510,35 +520,51 @@ export default function LogExplorer() {
                                                     <AnimatePresence>
                                                         {isExpanded && logData && (
                                                             <motion.div
-                                                                initial={{ opacity: 0, height: 0 }}
-                                                                animate={{ opacity: 1, height: "auto" }}
-                                                                exit={{ opacity: 0, height: 0 }}
+                                                                initial={{opacity: 0, height: 0}}
+                                                                animate={{opacity: 1, height: "auto"}}
+                                                                exit={{opacity: 0, height: 0}}
                                                                 className="mt-3 rounded bg-gray-50 border text-sm overflow-x-auto"
                                                                 onClick={(e) => e.stopPropagation()}
                                                             >
                                                                 <div className="font-bold mb-3">Подробнее о блоке:</div>
-                                                                <div className="grid grid-cols-2 gap-1 mb-3 p-3 bg-blue-50 rounded-lg border border-blue-200">
+                                                                <div
+                                                                    className="grid grid-cols-2 gap-1 mb-3 p-3 bg-blue-50 rounded-lg border border-blue-200">
                                                                     <div><strong>Id:</strong> {operationBlock.id}</div>
-                                                                    <div><strong>Время начала:</strong> {new Date(operationBlock.startTime).toLocaleString()}</div>
-                                                                    <div><strong>Тип:</strong> {operationBlock.type}</div>
-                                                                    <div><strong>Время конца:</strong> {new Date(operationBlock.endTime).toLocaleString()}</div>
-                                                                    <div><strong>Кол-во логов:</strong> {operationBlock.logCount}</div>
+                                                                    <div><strong>Время
+                                                                        начала:</strong> {new Date(operationBlock.startTime).toLocaleString()}
+                                                                    </div>
+                                                                    <div><strong>Тип:</strong> {operationBlock.type}
+                                                                    </div>
+                                                                    <div><strong>Время
+                                                                        конца:</strong> {new Date(operationBlock.endTime).toLocaleString()}
+                                                                    </div>
+                                                                    <div><strong>Кол-во
+                                                                        логов:</strong> {operationBlock.logCount}</div>
                                                                 </div>
 
                                                                 <div className="font-bold mb-3">Логи:</div>
-                                                                <div className="mb-4 p-3 bg-gray-50 rounded-lg border border-gray-200 space-y-2">
+                                                                <div
+                                                                    className="mb-4 p-3 bg-gray-50 rounded-lg border border-gray-200 space-y-2">
                                                                     {Object.entries(logData)
                                                                         .filter(([key]) => !key.startsWith('@') && key !== 'additionalData')
                                                                         .map(([key, value]) => (
-                                                                            <LogRow key={key} keyName={key} value={value} parentId={operationBlock.id} />
+                                                                            <LogRow key={key} keyName={key}
+                                                                                    value={value}
+                                                                                    parentId={operationBlock.id}/>
                                                                         ))}
                                                                 </div>
 
                                                                 {logData.additionalData && Object.keys(logData.additionalData).length > 0 && (
-                                                                    <div className="mt-4 p-3 bg-blue-50 rounded-lg border border-blue-200 space-y-2">
-                                                                        <div className="font-bold text-sm mb-2 text-blue-800">Additional Data:</div>
+                                                                    <div
+                                                                        className="mt-4 p-3 bg-blue-50 rounded-lg border border-blue-200 space-y-2">
+                                                                        <div
+                                                                            className="font-bold text-sm mb-2 text-blue-800">Additional
+                                                                            Data:
+                                                                        </div>
                                                                         {Object.entries(logData.additionalData).map(([key, value]) => (
-                                                                            <LogRow key={key} keyName={key} value={value} parentId={operationBlock.id} />
+                                                                            <LogRow key={key} keyName={key}
+                                                                                    value={value}
+                                                                                    parentId={operationBlock.id}/>
                                                                         ))}
                                                                     </div>
                                                                 )}
@@ -562,14 +588,14 @@ export default function LogExplorer() {
                         ) : (
                             <ResponsiveContainer width="100%" height={400}>
                                 <BarChart data={timelineData}>
-                                    <CartesianGrid strokeDasharray="3 3" />
+                                    <CartesianGrid strokeDasharray="3 3"/>
                                     <XAxis
                                         dataKey="timestamp"
                                         tickFormatter={(ts) =>
                                             new Date(ts).toLocaleTimeString("ru-RU")
                                         }
                                     />
-                                    <YAxis dataKey="name" type="category" />
+                                    <YAxis dataKey="name" type="category"/>
                                     <Tooltip
                                         formatter={(value, name) => {
                                             if (name === "timestamp") {
@@ -581,14 +607,14 @@ export default function LogExplorer() {
                                             return [value, name];
                                         }}
                                     />
-                                    <Bar dataKey="timestamp" fill="#8884d8" />
+                                    <Bar dataKey="timestamp" fill="#8884d8"/>
                                 </BarChart>
                             </ResponsiveContainer>
                         )}
                     </div>
                 )}
             </main>
-            <Footer />
+            <Footer/>
         </>
     );
 }
