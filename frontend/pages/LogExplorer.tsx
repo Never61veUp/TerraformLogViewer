@@ -49,20 +49,20 @@ interface ProcessedLogsDto {
     "@level"?: string;
     "@message"?: string;
     "@timestamp"?: string;
-    
+
     // Модули и компоненты
     "@module"?: string;
     "@caller"?: string;
-    
+
     // RPC и идентификаторы
     tf_rpc?: string;
     tf_req_id?: string;
     tf_proto_version?: string;
-    
+
     // Ресурсы и провайдеры
     tf_provider_addr?: string;
     tf_resource_type?: string;
-    
+
     // Поля плагинов
     path?: string;
     pid?: number;
@@ -72,23 +72,23 @@ interface ProcessedLogsDto {
     address?: string;
     network?: string;
     version?: number;
-    
+
     // Диагностика и ошибки
     diagnostic_error_count?: number;
     diagnostic_warning_count?: number;
     err?: string;
-    
+
     // Временные метки и производительность
     timestamp?: string; // дублирующее поле
     tf_req_duration_ms?: number;
     tf_data_source_type?: string;
-    
+
     // Capabilities
     tf_server_capability_get_provider_schema_optional?: boolean;
     tf_server_capability_move_resource_state?: boolean;
     tf_server_capability_plan_destroy?: boolean;
     tf_client_capability_write_only_attributes_allowed?: boolean;
-    
+
     // Дополнительные поля
     additionalData?: Record<string, any>;
     timestampParsed?: string;
@@ -186,20 +186,20 @@ export default function LogExplorer() {
                             "@level": log["@level"],
                             "@message": log["@message"],
                             "@timestamp": log["@timestamp"],
-                            
+
                             // Модули и компоненты
                             "@module": log["@module"],
                             "@caller": log["@caller"],
-                            
+
                             // RPC и идентификаторы
                             tf_rpc: log.tf_rpc,
                             tf_req_id: log.tf_req_id,
                             tf_proto_version: log.tf_proto_version,
-                            
+
                             // Ресурсы и провайдеры
                             tf_provider_addr: log.tf_provider_addr,
                             tf_resource_type: log.tf_resource_type,
-                            
+
                             // Поля плагинов
                             path: log.path,
                             pid: log.pid,
@@ -209,28 +209,28 @@ export default function LogExplorer() {
                             address: log.address,
                             network: log.network,
                             version: log.version,
-                            
+
                             // Диагностика и ошибки
                             diagnostic_error_count: log.diagnostic_error_count,
                             diagnostic_warning_count: log.diagnostic_warning_count,
                             err: log.err,
-                            
+
                             // Временные метки и производительность
                             timestamp: log.timestamp,
                             tf_req_duration_ms: log.tf_req_duration_ms,
                             tf_data_source_type: log.tf_data_source_type,
-                            
+
                             // Capabilities
                             tf_server_capability_get_provider_schema_optional: log.tf_server_capability_get_provider_schema_optional,
                             tf_server_capability_move_resource_state: log.tf_server_capability_move_resource_state,
                             tf_server_capability_plan_destroy: log.tf_server_capability_plan_destroy,
                             tf_client_capability_write_only_attributes_allowed: log.tf_client_capability_write_only_attributes_allowed,
-                            
+
                             // Дополнительные поля
                             additionalData: log.additionalData,
                             timestampParsed: log.timestampParsed,
                             levelParsed: log.levelParsed,
-                            
+
                             // Все остальные поля
                             ...log
                             })),
@@ -262,72 +262,98 @@ export default function LogExplorer() {
     };
 
     // ======= Filtering =======
-    const filteredLogs = logs.filter((operationBlock) => {
-        if (read.has(operationBlock.id)) return false;
+    const filteredLogs = logs
+        .map((operationBlock) => {
+            if (read.has(operationBlock.id)) return null
 
-        // Если у блока есть логи, фильтруем по ним
-        const logData = operationBlock.logs;
-        if (!logData) return false;
+            // Filter logs array based on criteria
+            const filteredBlockLogs = (operationBlock.logs || []).filter((logData) => {
+                const matchesSearch =
+                    (logData["@message"]?.toLowerCase().includes(searchQuery.toLowerCase()) ?? false) ||
+                    (logData.tf_req_id?.toLowerCase().includes(searchQuery.toLowerCase()) ?? false) ||
+                    JSON.stringify(logData).toLowerCase().includes(searchQuery.toLowerCase())
 
-        const matchesSearch =
-            (logData["@message"]?.toLowerCase().includes(searchQuery.toLowerCase()) ?? false) ||
-            (logData.tf_req_id?.toLowerCase().includes(searchQuery.toLowerCase()) ?? false) ||
-            JSON.stringify(logData).toLowerCase().includes(searchQuery.toLowerCase());
+                const matchesType = tfTypeFilter ? logData.tf_resource_type?.toLowerCase() === tfTypeFilter.toLowerCase() : true
 
-        const matchesType = tfTypeFilter ? logData.tf_resource_type === tfTypeFilter : true;
-        const matchesLevel = levelFilter ? logData["@level"] === levelFilter : true;
-        const matchesAction = actionFilter ? logData.tf_rpc === actionFilter : true;
+                const matchesLevel = levelFilter ? logData["@level"]?.toLowerCase() === levelFilter.toLowerCase() : true
 
-        const matchesTimestamp = (() => {
-            if (!timestampRange) return true;
+                const matchesAction = actionFilter
+                    ? operationBlock.type.toLowerCase() === actionFilter.toLowerCase()
+                    : true
 
-            const [start, end] = timestampRange;
-            const operationStart = new Date(operationBlock.startTime);
-            const operationEnd = new Date(operationBlock.endTime);
+                const matchesTimestamp = (() => {
+                    if (!timestampRange) return true
 
-            if (start && end) {
-                const startDate = new Date(start);
-                const endDate = new Date(end);
-                // Блок операций пересекается с диапазоном времени
-                return operationStart <= endDate && operationEnd >= startDate;
-            } else if (start) {
-                return operationEnd >= new Date(start);
-            } else if (end) {
-                return operationStart <= new Date(end);
+                    const [start, end] = timestampRange
+                    const logTimestamp = new Date(logData["@timestamp"] || logData.timestamp || operationBlock.startTime)
+
+                    if (start && end) {
+                        const startDate = new Date(start)
+                        const endDate = new Date(end)
+                        return logTimestamp >= startDate && logTimestamp <= endDate
+                    } else if (start) {
+                        return logTimestamp >= new Date(start)
+                    } else if (end) {
+                        return logTimestamp <= new Date(end)
+                    }
+
+                    return true
+                })()
+
+                return matchesSearch && matchesType && matchesLevel && matchesAction && matchesTimestamp
+            })
+
+            // Only return block if it has filtered logs
+            if (filteredBlockLogs.length === 0) return null
+
+            return {
+                ...operationBlock,
+                logs: filteredBlockLogs,
+                logCount: filteredBlockLogs.length,
             }
-
-            return true;
-        })();
-
-        return matchesSearch && matchesType && matchesLevel && matchesAction && matchesTimestamp;
-    });
+        })
+        .filter((block): block is TerraformOperationBlockDto => block !== null)
 
     // ======= Grouping =======
     const groupedLogs: TerraformOperationBlockDto[][] = grouped
         ? Array.from(
             filteredLogs.reduce<Map<string, TerraformOperationBlockDto[]>>((map, operationBlock) => {
-                const reqId = operationBlock.logs?.tf_req_id || operationBlock.id;
-                if (!map.has(reqId)) map.set(reqId, []);
-                map.get(reqId)!.push(operationBlock);
-                return map;
-            }, new Map())
+                // Get all unique tf_req_ids from logs in this block
+                const reqIds = new Set(
+                    (operationBlock.logs || [])
+                        .map((log) => log.tf_req_id)
+                        .filter((id): id is string => id !== undefined && id !== null),
+                )
+
+                // If block has no tf_req_ids or multiple different ones, use block id
+                const groupKey = reqIds.size === 1 ? Array.from(reqIds)[0] : operationBlock
+
+                if (!map.has(groupKey)) map.set(groupKey, [])
+                map.get(groupKey)!.push(operationBlock)
+                return map
+            }, new Map()),
         ).map(([_, operationBlocks]) =>
-            operationBlocks.sort((a, b) => new Date(a.startTime).getTime() - new Date(b.startTime).getTime())
+            operationBlocks.sort((a, b) => new Date(a.startTime).getTime() - new Date(b.startTime).getTime()),
         )
-        : [filteredLogs.sort((a, b) => new Date(a.startTime).getTime() - new Date(b.startTime).getTime())];
+        : [filteredLogs.sort((a, b) => new Date(a.startTime).getTime() - new Date(b.startTime).getTime())]
+
 
     // ======= Timeline Data =======
-    const timelineData = filteredLogs.map((operationBlock) => ({
-        name: operationBlock.logs?.tf_req_id || operationBlock.id,
-        timestamp: new Date(operationBlock.startTime).getTime(),
-        level: operationBlock.logs?.["@level"] || "unknown",
-        action: operationBlock.logs?.tf_rpc || operationBlock.type,
-        endTime: new Date(operationBlock.endTime).getTime(),
-        duration: operationBlock.logs?.tf_req_duration_ms || 
-            (new Date(operationBlock.endTime).getTime() - new Date(operationBlock.startTime).getTime())
-    }));
+    const timelineData = filteredLogs.flatMap((operationBlock) =>
+        (operationBlock.logs || []).map((log) => ({
+            name: log.tf_req_id || operationBlock.id,
+            timestamp: new Date(log["@timestamp"] || log.timestamp || operationBlock.startTime).getTime(),
+            level: log["@level"] || "unknown",
+            action: log.tf_rpc || operationBlock.type,
+            endTime: new Date(operationBlock.endTime).getTime(),
+            duration:
+                log.tf_req_duration_ms ||
+                new Date(operationBlock.endTime).getTime() - new Date(operationBlock.startTime).getTime(),
+        })),
+    )
 
 // ======= Render =======
+
 return (
     <>
         <Header />
@@ -427,10 +453,9 @@ return (
                                 onChange={(e) => setActionFilter(e.target.value)}
                             >
                                 <option value="">Все действия</option>
-                                <option value="ApplyResourceChange">ApplyResourceChange</option>
-                                <option value="PlanResourceChange">PlanResourceChange</option>
-                                <option value="ReadResource">ReadResource</option>
-                                <option value="ConfigureProvider">ConfigureProvider</option>
+                                <option value="apply">Apply</option>
+                                <option value="plan">Plan</option>
+                                <option value="other">Other</option>
                             </select>
                             <input
                                 type="date"
@@ -521,8 +546,8 @@ return (
                                                             logs: {operationBlock.logCount}
                                                         </span>
                                                         <span className="text-xs px-2 py-1 rounded bg-gray-200 text-gray-800">
-                                                            duration: {logData?.tf_req_duration_ms || 
-                                                                (new Date(operationBlock.endTime).getTime() - 
+                                                            duration: {logData?.tf_req_duration_ms ||
+                                                                (new Date(operationBlock.endTime).getTime() -
                                                                  new Date(operationBlock.startTime).getTime())
                                                             }ms
                                                         </span>
