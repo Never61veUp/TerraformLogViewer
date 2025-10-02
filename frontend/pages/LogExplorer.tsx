@@ -232,9 +232,17 @@ export default function LogExplorer() {
                 (log.tf_req_id?.toLowerCase().includes(searchQuery.toLowerCase()) ?? false) ||
                 JSON.stringify(log).toLowerCase().includes(searchQuery.toLowerCase());
 
-            const matchesType = tfTypeFilter ? log.tf_resource_type === tfTypeFilter : true;
-            const matchesLevel = levelFilter ? log["@level"]?.toLowerCase() === levelFilter.toLowerCase() : true;
-            const matchesAction = actionFilter ? log.tf_rpc === actionFilter : true;
+            const matchesType = tfTypeFilter
+                ? log.tf_resource_type?.toLowerCase() === tfTypeFilter.toLowerCase()
+                : true;
+
+            const matchesLevel = levelFilter
+                ? log["@level"]?.toLowerCase() === levelFilter.toLowerCase()
+                : true;
+
+            const matchesAction = actionFilter
+                ? log.tf_rpc === actionFilter
+                : true;
 
             const matchesTimestamp = (() => {
                 if (!timestampRange) return true;
@@ -257,6 +265,7 @@ export default function LogExplorer() {
             return matchesSearch && matchesType && matchesLevel && matchesAction && matchesTimestamp;
         });
     });
+
 
 
     const groupedLogs: TerraformOperationBlockDto[][] = grouped
