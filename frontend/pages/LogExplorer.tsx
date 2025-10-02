@@ -36,7 +36,7 @@ interface LogEntry {
 
 interface TerraformOperationBlockDto {
     type: "plan" | "apply" | "other";
-    logs?: ProcessedLogsDto;
+    logs?: ProcessedLogsDto[];
     logCount: number;
     startTime: Date;
     endTime: Date;
@@ -262,20 +262,24 @@ export default function LogExplorer() {
     };
 
     // ======= Filtering =======
-    const filteredLogs = logs
-        .map((operationBlock) => {
+    const filteredLogs: TerraformOperationBlockDto[] = logs
+        .map((operationBlock): TerraformOperationBlockDto | null => {
             if (read.has(operationBlock.id)) return null
 
             // Filter logs array based on criteria
-            const filteredBlockLogs = (operationBlock.logs || []).filter((logData) => {
+            const filteredBlockLogs = (operationBlock.logs ?? []).filter((logData) => {
                 const matchesSearch =
                     (logData["@message"]?.toLowerCase().includes(searchQuery.toLowerCase()) ?? false) ||
                     (logData.tf_req_id?.toLowerCase().includes(searchQuery.toLowerCase()) ?? false) ||
                     JSON.stringify(logData).toLowerCase().includes(searchQuery.toLowerCase())
 
-                const matchesType = tfTypeFilter ? logData.tf_resource_type?.toLowerCase() === tfTypeFilter.toLowerCase() : true
+                const matchesType = tfTypeFilter
+                    ? logData.tf_resource_type?.toLowerCase() === tfTypeFilter.toLowerCase()
+                    : true
 
-                const matchesLevel = levelFilter ? logData["@level"]?.toLowerCase() === levelFilter.toLowerCase() : true
+                const matchesLevel = levelFilter
+                    ? logData["@level"]?.toLowerCase() === levelFilter.toLowerCase()
+                    : true
 
                 const matchesAction = actionFilter
                     ? operationBlock.type.toLowerCase() === actionFilter.toLowerCase()
@@ -285,7 +289,9 @@ export default function LogExplorer() {
                     if (!timestampRange) return true
 
                     const [start, end] = timestampRange
-                    const logTimestamp = new Date(logData["@timestamp"] || logData.timestamp || operationBlock.startTime)
+                    const logTimestamp = new Date(
+                        logData["@timestamp"] || logData.timestamp || operationBlock.startTime,
+                    )
 
                     if (start && end) {
                         const startDate = new Date(start)
@@ -308,7 +314,7 @@ export default function LogExplorer() {
 
             return {
                 ...operationBlock,
-                logs: filteredBlockLogs,
+                logs: filteredBlockLogs, // гарантированно массив
                 logCount: filteredBlockLogs.length,
             }
         })
@@ -320,35 +326,42 @@ export default function LogExplorer() {
             filteredLogs.reduce<Map<string, TerraformOperationBlockDto[]>>((map, operationBlock) => {
                 // Get all unique tf_req_ids from logs in this block
                 const reqIds = new Set(
-                    (operationBlock.logs || [])
+                    (operationBlock.logs ?? [])
                         .map((log) => log.tf_req_id)
-                        .filter((id): id is string => id !== undefined && id !== null),
+                        .filter((id): id is string => !!id),
                 )
 
-                // If block has no tf_req_ids or multiple different ones, use block id
-                const groupKey = reqIds.size === 1 ? Array.from(reqIds)[0] : operationBlock
+                // Если reqIds.size === 1 — группируем по нему, иначе по id блока
+                const groupKey = reqIds.size === 1 ? Array.from(reqIds)[0] : operationBlock.id
 
                 if (!map.has(groupKey)) map.set(groupKey, [])
                 map.get(groupKey)!.push(operationBlock)
+
                 return map
-            }, new Map()),
+            }, new Map<string, TerraformOperationBlockDto[]>()),
         ).map(([_, operationBlocks]) =>
-            operationBlocks.sort((a, b) => new Date(a.startTime).getTime() - new Date(b.startTime).getTime()),
+            operationBlocks.sort(
+                (a, b) => new Date(a.startTime).getTime() - new Date(b.startTime).getTime(),
+            ),
         )
-        : [filteredLogs.sort((a, b) => new Date(a.startTime).getTime() - new Date(b.startTime).getTime())]
+        : [
+            filteredLogs.sort(
+                (a, b) => new Date(a.startTime).getTime() - new Date(b.startTime).getTime(),
+            ),
+        ]
 
 
     // ======= Timeline Data =======
     const timelineData = filteredLogs.flatMap((operationBlock) =>
-        (operationBlock.logs || []).map((log) => ({
-            name: log.tf_req_id || operationBlock.id,
-            timestamp: new Date(log["@timestamp"] || log.timestamp || operationBlock.startTime).getTime(),
+        (operationBlock!.logs || []).map((log) => ({
+            name: log.tf_req_id || operationBlock!.id,
+            timestamp: new Date(log["@timestamp"] || log.timestamp || operationBlock!.startTime).getTime(),
             level: log["@level"] || "unknown",
-            action: log.tf_rpc || operationBlock.type,
-            endTime: new Date(operationBlock.endTime).getTime(),
+            action: log.tf_rpc || operationBlock!.type,
+            endTime: new Date(operationBlock!.endTime).getTime(),
             duration:
                 log.tf_req_duration_ms ||
-                new Date(operationBlock.endTime).getTime() - new Date(operationBlock.startTime).getTime(),
+                new Date(operationBlock!.endTime).getTime() - new Date(operationBlock!.startTime).getTime(),
         })),
     )
 
@@ -482,33 +495,34 @@ return (
                                 <div key={i} className="space-y-4">
                                     {grouped && (
                                         <h2 className="text-lg font-semibold">
-                                            Группа tf_req_id: {group[0]?.logs?.tf_req_id || group[0]?.id}
+                                            Группа tf_req_id: {group[0]?.logs?.[0]?.tf_req_id || group[0]?.id}
                                         </h2>
                                     )}
                                     {group.map((operationBlock) => {
                                         const isExpanded = expanded === operationBlock.id;
                                         const isRead = read.has(operationBlock.id);
-                                        const logData = operationBlock.logs;
+                                        // Берём первый лог для отображения основных полей
+                                        const logData = operationBlock.logs?.[0];
 
-                                        return (
-                                            <motion.div
-                                                key={operationBlock.id}
-                                                layout
-                                                className={`rounded-xl border p-4 transition cursor-pointer ${
-                                                    isRead
-                                                        ? "opacity-50 border-gray-300"
-                                                        : `border-l-4 ${
-                                                            operationBlock.type === "plan"
-                                                                ? "border-blue-400"
-                                                                : operationBlock.type === "apply"
-                                                                    ? "border-purple-400"
-                                                                    : "border-gray-200"
-                                                        }`
-                                                }`}
-                                                onClick={() =>
-                                                    setExpanded(isExpanded ? null : operationBlock.id)
-                                                }
-                                            >
+                                    return (
+                                        <motion.div
+                                            key={operationBlock.id}
+                                            layout
+                                            className={`rounded-xl border p-4 transition cursor-pointer ${
+                                                isRead
+                                                    ? "opacity-50 border-gray-300"
+                                                    : `border-l-4 ${
+                                                        operationBlock.type === "plan"
+                                                            ? "border-blue-400"
+                                                            : operationBlock.type === "apply"
+                                                                ? "border-purple-400"
+                                                                : "border-gray-200"
+                                                    }`
+                                            }`}
+                                            onClick={() =>
+                                                setExpanded(isExpanded ? null : operationBlock.id)
+                                            }
+                                        >
                                                 <div className="flex items-center justify-between flex-wrap gap-2">
                                                     <div className="flex items-center gap-3 flex-wrap">
                                                         <span
@@ -548,7 +562,7 @@ return (
                                                         <span className="text-xs px-2 py-1 rounded bg-gray-200 text-gray-800">
                                                             duration: {logData?.tf_req_duration_ms ||
                                                                 (new Date(operationBlock.endTime).getTime() -
-                                                                 new Date(operationBlock.startTime).getTime())
+                                                                new Date(operationBlock.startTime).getTime())
                                                             }ms
                                                         </span>
                                                     </div>
@@ -577,7 +591,7 @@ return (
                                                 </div>
 
                                                 <AnimatePresence>
-                                                    {isExpanded && logData && (
+                                                    {isExpanded && operationBlock.logs && (
                                                         <motion.div
                                                             initial={{ opacity: 0, height: 0 }}
                                                             animate={{ opacity: 1, height: "auto" }}
@@ -596,34 +610,40 @@ return (
 
                                                             <div className="font-bold mb-3">Логи:</div>
                                                             <div className="mb-4 p-3 bg-gray-50 rounded-lg border border-gray-200">
-                                                                {Object.entries(logData)
-                                                                    .filter(([key]) => !key.startsWith('@') && key !== 'additionalData')
-                                                                    .map(([key, value]) => (
-
-
-                                                                            <JsonViewer
-                                                                                data={value}
-                                                                                depth={0}
-                                                                                key={key}
-                                                                            />
-                                                                    ))}
+                                                                {operationBlock.logs.map((log, idx) => (
+                                                                    <div key={idx} className="mb-2">
+                                                                        {Object.entries(log)
+                                                                            .filter(([key]) => !key.startsWith('@') && key !== 'additionalData')
+                                                                            .map(([key, value]) => (
+                                                                                <JsonViewer
+                                                                                    data={value}
+                                                                                    depth={0}
+                                                                                    key={key}
+                                                                                />
+                                                                            ))}
+                                                                    </div>
+                                                                ))}
                                                             </div>
 
                                                             {/* Additional Data */}
-                                                            {logData.additionalData && Object.keys(logData.additionalData).length > 0 && (
+                                                            {operationBlock.logs.some(l => l.additionalData && Object.keys(l.additionalData).length > 0) && (
                                                                 <div className="mt-4 p-3 bg-blue-50 rounded-lg border border-blue-200">
                                                                     <div className="font-bold text-sm mb-2 text-blue-800">Additional Data:</div>
-                                                                    {Object.entries(logData.additionalData).map(([key, value]) => (
-                                                                        <div key={key} className="mb-2 p-2 bg-white rounded border">
-                                                                            <span className="font-mono text-blue-600 mr-1">
-                                                                                {key}:
-                                                                            </span>
-                                                                            <JsonViewer
-                                                                                data={value}
-                                                                                depth={0}
-                                                                            />
-                                                                        </div>
-                                                                    ))}
+                                                                    {operationBlock.logs.map((log, idx) =>
+                                                                        log.additionalData
+                                                                            ? Object.entries(log.additionalData).map(([key, value]) => (
+                                                                                <div key={key + idx} className="mb-2 p-2 bg-white rounded border">
+                                                                                    <span className="font-mono text-blue-600 mr-1">
+                                                                                        {key}:
+                                                                                    </span>
+                                                                                    <JsonViewer
+                                                                                        data={value}
+                                                                                        depth={0}
+                                                                                    />
+                                                                                </div>
+                                                                            ))
+                                                                            : null
+                                                                    )}
                                                                 </div>
                                                             )}
                                                         </motion.div>
