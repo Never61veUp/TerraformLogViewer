@@ -1,4 +1,4 @@
-const API_URL = "https://api.terraformlogviewer.ru";
+const API_URL = "http://localhost:5050";
 
 export function getToken() {
     return localStorage.getItem("token");

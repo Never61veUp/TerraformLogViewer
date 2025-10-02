@@ -1,4 +1,4 @@
-const API_URL = "https://cjyajo-5-166-53-171.ru.tuna.am/swagger/index.html";
+const API_URL = "http://localhost:5050";
 
 export interface AuthResponse {
     access_token: string;

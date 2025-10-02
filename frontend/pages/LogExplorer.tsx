@@ -149,7 +149,7 @@ export default function LogExplorer() {
     const [actionFilter, setActionFilter] = useState("");
     const [timestampRange, setTimestampRange] = useState<[string | null, string | null]>([null, null]);
 
-    const API_URL = "https://cjyajo-5-166-53-171.ru.tuna.am";
+    const API_URL = "http://localhost:5050";
 
     // Состояние для отслеживания раскрытых логов
     const [expandedLogs, setExpandedLogs] = useState<Set<string>>(new Set());
