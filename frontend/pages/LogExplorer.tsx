@@ -119,7 +119,7 @@ export default function LogExplorer() {
     const [actionFilter, setActionFilter] = useState("");
     const [timestampRange, setTimestampRange] = useState<[string | null, string | null]>([null, null]);
 
-    const API_URL = "http://localhost:5050";
+    const API_URL = "https://cjyajo-5-166-53-171.ru.tuna.am";
 
     // ======= Helpers =======
     const normalizeLevel = (level: any, message?: string): "INFO" | "WARN" | "ERROR" => {
@@ -265,42 +265,49 @@ export default function LogExplorer() {
     const filteredLogs = logs.filter((operationBlock) => {
         if (read.has(operationBlock.id)) return false;
 
-        // Если у блока есть логи, фильтруем по ним
-        const logData = operationBlock.logs;
-        if (!logData) return false;
+        const logArray = operationBlock.logs;
+        if (!Array.isArray(logArray) || logArray.length === 0) return false;
 
-        const matchesSearch =
-            (logData["@message"]?.toLowerCase().includes(searchQuery.toLowerCase()) ?? false) ||
-            (logData.tf_req_id?.toLowerCase().includes(searchQuery.toLowerCase()) ?? false) ||
-            JSON.stringify(logData).toLowerCase().includes(searchQuery.toLowerCase());
+        return logArray.some((log) => {
+            const matchesSearch =
+                (log["@message"]?.toLowerCase().includes(searchQuery.toLowerCase()) ?? false) ||
+                (log.tf_req_id?.toLowerCase().includes(searchQuery.toLowerCase()) ?? false) ||
+                JSON.stringify(log).toLowerCase().includes(searchQuery.toLowerCase());
 
-        const matchesType = tfTypeFilter ? logData.tf_resource_type === tfTypeFilter : true;
-        const matchesLevel = levelFilter ? logData["@level"] === levelFilter : true;
-        const matchesAction = actionFilter ? logData.tf_rpc === actionFilter : true;
+            const matchesType = tfTypeFilter
+                ? log.tf_resource_type?.toLowerCase() === tfTypeFilter.toLowerCase()
+                : true;
 
-        const matchesTimestamp = (() => {
-            if (!timestampRange) return true;
+            const matchesLevel = levelFilter
+                ? log["@level"]?.toLowerCase() === levelFilter.toLowerCase()
+                : true;
 
-            const [start, end] = timestampRange;
-            const operationStart = new Date(operationBlock.startTime);
-            const operationEnd = new Date(operationBlock.endTime);
+            const matchesAction = actionFilter
+                ? log.tf_rpc === actionFilter
+                : true;
 
-            if (start && end) {
-                const startDate = new Date(start);
-                const endDate = new Date(end);
-                // Блок операций пересекается с диапазоном времени
-                return operationStart <= endDate && operationEnd >= startDate;
-            } else if (start) {
-                return operationEnd >= new Date(start);
-            } else if (end) {
-                return operationStart <= new Date(end);
-            }
+            const matchesTimestamp = (() => {
+                if (!timestampRange) return true;
+                const [start, end] = timestampRange;
+                const operationStart = new Date(operationBlock.startTime);
+                const operationEnd = new Date(operationBlock.endTime);
 
-            return true;
-        })();
+                if (start && end) {
+                    const startDate = new Date(start);
+                    const endDate = new Date(end);
+                    return operationStart <= endDate && operationEnd >= startDate;
+                } else if (start) {
+                    return operationEnd >= new Date(start);
+                } else if (end) {
+                    return operationStart <= new Date(end);
+                }
+                return true;
+            })();
 
-        return matchesSearch && matchesType && matchesLevel && matchesAction && matchesTimestamp;
+            return matchesSearch && matchesType && matchesLevel && matchesAction && matchesTimestamp;
+        });
     });
+
 
     // ======= Grouping =======
     const groupedLogs: TerraformOperationBlockDto[][] = grouped
