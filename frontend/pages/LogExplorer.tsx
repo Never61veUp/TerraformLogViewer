@@ -1,5 +1,5 @@
 "use client";
-import React, {useState} from "react";
+import React, {useMemo, useState} from "react";
 import {motion, AnimatePresence} from "framer-motion";
 import {
     ChevronDown,
@@ -15,12 +15,23 @@ import {
     XAxis,
     YAxis,
     Tooltip,
-    CartesianGrid,
+    CartesianGrid, Rectangle, ScatterChart, Scatter,
 } from "recharts";
 
 import Header from "../Components/Header";
 import Footer from "../Components/Footer";
 import JsonViewer from "../Components/JsonViewer";
+
+interface TfReqGroup {
+    tf_req_id: string;
+    startTime: Date;
+    endTime: Date;
+    logCount: number;
+    operations: TerraformOperationBlockDto[];
+    allLogs: ProcessedLogsDto[];
+    rpcType: string;
+    duration: number;
+}
 
 interface LogEntry {
     id: string;
@@ -36,7 +47,7 @@ interface LogEntry {
 
 interface TerraformOperationBlockDto {
     type: "plan" | "apply" | "other";
-    logs?: ProcessedLogsDto;
+    logs?: ProcessedLogsDto[];
     logCount: number;
     startTime: Date;
     endTime: Date;
@@ -261,96 +272,316 @@ export default function LogExplorer() {
         });
     };
 
-    // ======= Filtering =======
-    const filteredLogs = logs
-        .map((operationBlock) => {
-            if (read.has(operationBlock.id)) return null
+    // Функция для получения временной метки по приоритету
+    const getTimestampFromLog = (log: ProcessedLogsDto): Date | null => {
+        // Приоритет: timestampParsed -> "@timestamp" -> timestamp
+        if (log.timestampParsed) {
+            return new Date(log.timestampParsed);
+        } else if (log["@timestamp"]) {
+            return new Date(log["@timestamp"]);
+        } else if (log.timestamp) {
+            return new Date(log.timestamp);
+        }
+        return null;
+    };
 
-            // Filter logs array based on criteria
-            const filteredBlockLogs = (operationBlock.logs || []).filter((logData) => {
-                const matchesSearch =
-                    (logData["@message"]?.toLowerCase().includes(searchQuery.toLowerCase()) ?? false) ||
-                    (logData.tf_req_id?.toLowerCase().includes(searchQuery.toLowerCase()) ?? false) ||
-                    JSON.stringify(logData).toLowerCase().includes(searchQuery.toLowerCase())
+    // Функция для группировки логов по tf_req_id
+    const getGroupedByTfReqId = useMemo((): TfReqGroup[] => {
+        const groupsMap = new Map<string, TfReqGroup>();
 
-                const matchesType = tfTypeFilter ? logData.tf_resource_type?.toLowerCase() === tfTypeFilter.toLowerCase() : true
+        logs.forEach(operationBlock => {
+            if (!operationBlock.logs) return;
 
-                const matchesLevel = levelFilter ? logData["@level"]?.toLowerCase() === levelFilter.toLowerCase() : true
+            operationBlock.logs.forEach(log => {
+                const tfReqId = log.tf_req_id;
+                if (!tfReqId) return;
 
-                const matchesAction = actionFilter
-                    ? operationBlock.type.toLowerCase() === actionFilter.toLowerCase()
-                    : true
+                const logTimestamp = getTimestampFromLog(log);
+                if (!logTimestamp) return;
 
-                const matchesTimestamp = (() => {
-                    if (!timestampRange) return true
+                if (!groupsMap.has(tfReqId)) {
+                    groupsMap.set(tfReqId, {
+                        tf_req_id: tfReqId,
+                        startTime: logTimestamp,
+                        endTime: logTimestamp,
+                        logCount: 0,
+                        operations: [],
+                        allLogs: [],
+                        rpcType: log.tf_rpc || "unknown",
+                        duration: 0
+                    });
+                }
 
-                    const [start, end] = timestampRange
-                    const logTimestamp = new Date(logData["@timestamp"] || logData.timestamp || operationBlock.startTime)
+                const group = groupsMap.get(tfReqId)!;
+                group.allLogs.push(log);
+                group.logCount++;
 
-                    if (start && end) {
-                        const startDate = new Date(start)
-                        const endDate = new Date(end)
-                        return logTimestamp >= startDate && logTimestamp <= endDate
-                    } else if (start) {
-                        return logTimestamp >= new Date(start)
-                    } else if (end) {
-                        return logTimestamp <= new Date(end)
-                    }
+                // Обновляем временные границы
+                if (logTimestamp < group.startTime) {
+                    group.startTime = logTimestamp;
+                }
+                if (logTimestamp > group.endTime) {
+                    group.endTime = logTimestamp;
+                }
 
-                    return true
-                })()
+                // Добавляем операцию если еще не добавлена
+                if (!group.operations.find(op => op.id === operationBlock.id)) {
+                    group.operations.push(operationBlock);
+                }
+            });
+        });
 
-                return matchesSearch && matchesType && matchesLevel && matchesAction && matchesTimestamp
-            })
+        // Рассчитываем длительность для каждой группы
+        Array.from(groupsMap.values()).forEach(group => {
+            group.duration = group.endTime.getTime() - group.startTime.getTime();
+        });
 
-            // Only return block if it has filtered logs
-            if (filteredBlockLogs.length === 0) return null
+        // Сортируем по времени начала (хронологический порядок)
+        return Array.from(groupsMap.values()).sort((a, b) =>
+            a.startTime.getTime() - b.startTime.getTime()
+        );
+    }, [logs]);
 
-            return {
-                ...operationBlock,
-                logs: filteredBlockLogs,
-                logCount: filteredBlockLogs.length,
-            }
-        })
-        .filter((block): block is TerraformOperationBlockDto => block !== null)
+    // Функция для получения цвета по типу RPC
+    const getColorByRpcType = (rpcType: string) => {
+        const colors: { [key: string]: string } = {
+            'GetProviderSchema': '#8884d8',
+            'PlanResourceChange': '#82ca9d',
+            'ApplyResourceChange': '#ffc658',
+            'ReadResource': '#ff8042',
+            'ConfigureProvider': '#0088fe',
+            'ValidateResourceConfig': '#00C49F',
+            'ValidateDataResourceConfig': '#FFBB28',
+            'UpgradeResourceState': '#FF8042',
+            'ReadDataSource': '#0088FE',
+            'unknown': '#cccccc'
+        };
+        return colors[rpcType] || '#cccccc';
+    };
 
-    // ======= Grouping =======
+    // Данные для диаграммы Ганта - показываем реальное временное положение
+    const ganttData = useMemo(() => {
+        if (getGroupedByTfReqId.length === 0) return [];
+
+        // Находим реальный временной диапазон всех запросов
+        const allStartTimes = getGroupedByTfReqId.map(group => group.startTime.getTime());
+        const allEndTimes = getGroupedByTfReqId.map(group => group.endTime.getTime());
+        const absoluteMinTime = Math.min(...allStartTimes);
+        const absoluteMaxTime = Math.max(...allEndTimes);
+
+        return getGroupedByTfReqId.map((group, index) => ({
+            id: index,
+            name: group.tf_req_id,
+            startTime: group.startTime.getTime(),
+            endTime: group.endTime.getTime(),
+            duration: group.duration,
+            logCount: group.logCount,
+            rpcType: group.rpcType,
+            tf_req_id: group.tf_req_id,
+            // ВАЖНО: Используем фактическое время начала для позиционирования
+            // и длительность для вычисления ширины
+            value: group.duration, // Это будет определять ширину бара
+            startValue: group.startTime.getTime(), // Это начало бара
+        }));
+    }, [getGroupedByTfReqId]);
+
+    // Получаем реальный временной диапазон для domain
+    const timeDomain = useMemo(() => {
+        if (ganttData.length === 0) return ['dataMin', 'dataMax'];
+
+        const allStartTimes = ganttData.map(item => item.startTime);
+        const allEndTimes = ganttData.map(item => item.endTime);
+        const minTime = Math.min(...allStartTimes);
+        const maxTime = Math.max(...allEndTimes);
+
+        // Добавляем небольшие отступы для лучшего отображения
+        const padding = (maxTime - minTime) * 0.05; // 5% от общего времени
+        return [minTime - padding, maxTime + padding];
+    }, [ganttData]);
+
+    // Кастомный компонент для bar в диаграмме Ганта
+    const CustomBar = (props: any) => {
+        const { x, y, width, height, payload } = props;
+
+        // Вычисляем реальную позицию и ширину на основе времени начала и длительности
+        const barStartX = x; // x уже вычислен библиотекой на основе startValue
+        const barWidth = Math.max(width, 2); // Минимальная ширина для видимости
+
+        return (
+            <Rectangle
+                x={barStartX}
+                y={y}
+                width={barWidth}
+                height={Math.max(height, 10)} // Минимальная высота
+                fill={getColorByRpcType(payload.rpcType)}
+                stroke="#333"
+                strokeWidth={0.5}
+                radius={2}
+            />
+        );
+    };
+
+    // Кастомный тултип для диаграммы Ганта
+    const CustomTooltip = ({ active, payload, label }: any) => {
+        if (active && payload && payload.length) {
+            const data = payload[0].payload;
+
+            return (
+                <div className="bg-white p-4 border border-gray-300 rounded-lg shadow-lg">
+                    <p className="font-bold">{data.tf_req_id}</p>
+                    <p><strong>RPC Type:</strong> {data.rpcType}</p>
+                    <p><strong>Start:</strong> {formatDateTimeWithMs(data.startTime)}</p>
+                    <p><strong>End:</strong> {formatDateTimeWithMs(data.endTime)}</p>
+                    <p><strong>Duration:</strong> {data.duration}ms</p>
+                    <p><strong>Log Count:</strong> {data.logCount}</p>
+                </div>
+            );
+        }
+        return null;
+    };
+    // Альтернативные данные для ScatterChart
+    const scatterData = useMemo(() => {
+        if (getGroupedByTfReqId.length === 0) return [];
+
+        return getGroupedByTfReqId.map((group, index) => ({
+            x: group.startTime.getTime(),
+            y: index,
+            width: group.duration,
+            startTime: group.startTime.getTime(),
+            endTime: group.endTime.getTime(),
+            duration: group.duration,
+            logCount: group.logCount,
+            rpcType: group.rpcType,
+            tf_req_id: group.tf_req_id,
+            name: group.tf_req_id,
+        }));
+    }, [getGroupedByTfReqId]);
+
+    // Кастомная точка для ScatterChart
+    const CustomScatter = (props: any) => {
+        const { cx, cy, x, y, payload, width } = props;
+
+        return (
+            <Rectangle
+                x={cx - width / 2}
+                y={cy - 5}
+                width={Math.max(width, 2)}
+                height={10}
+                fill={getColorByRpcType(payload.rpcType)}
+                stroke="#333"
+                strokeWidth={0.5}
+                radius={2}
+            />
+        );
+    };
+
+    // Функция для форматирования временной оси
+    const timeFormatter = (timestamp: number) => {
+        return new Date(timestamp).toLocaleTimeString("ru-RU", {
+            hour: '2-digit',
+            minute: '2-digit',
+            second: '2-digit',
+            fractionalSecondDigits: 3,
+            timeZoneName: 'shortOffset'
+        });
+    };
+
+    const filteredLogs = logs.filter((operationBlock) => {
+        if (read.has(operationBlock.id)) return false;
+
+        const logData = operationBlock.logs;
+        if (!logData || !Array.isArray(logData)) return false;
+
+        // Проверяем, есть ли хотя бы один лог, соответствующий критериям поиска
+        const hasMatchingLog = logData.some((log) => {
+            const matchesSearch =
+                (log["@message"]?.toLowerCase().includes(searchQuery.toLowerCase()) ?? false) ||
+                (log.tf_req_id?.toLowerCase().includes(searchQuery.toLowerCase()) ?? false) ||
+                JSON.stringify(log).toLowerCase().includes(searchQuery.toLowerCase());
+
+            const matchesType = tfTypeFilter ? log.tf_resource_type === tfTypeFilter : true;
+            const matchesLevel = levelFilter ? log["@level"] === levelFilter : true;
+            const matchesAction = actionFilter ? log.tf_rpc === actionFilter : true;
+
+            const matchesTimestamp = (() => {
+                if (!timestampRange) return true;
+                const [start, end] = timestampRange;
+                const logTimestamp = new Date(log.timestampParsed!);
+
+                if (start && end) {
+                    const startDate = new Date(start);
+                    const endDate = new Date(end);
+                    return logTimestamp >= startDate && logTimestamp <= endDate;
+                } else if (start) {
+                    return logTimestamp >= new Date(start);
+                } else if (end) {
+                    return logTimestamp <= new Date(end);
+                }
+                return true;
+            })();
+
+            return matchesSearch && matchesType && matchesLevel && matchesAction && matchesTimestamp;
+        });
+
+        return hasMatchingLog;
+    });
+
+    // Функция для получения краткого описания лога
+    const getLogSummary = (log: ProcessedLogsDto) => {
+        if (!log) return "No details";
+        const msg = log["@message"] || log.err || "No message";
+        const resource = log.tf_resource_type ? ` [${log.tf_resource_type}]` : "";
+        const timestamp = log["@timestamp"]
+            ? new Date(log["@timestamp"]).toLocaleTimeString()
+            : "";
+        return `${timestamp} - ${msg}${resource}`;
+    };
+
+    // Группировка логов (добавьте этот код в ваш компонент)
     const groupedLogs: TerraformOperationBlockDto[][] = grouped
         ? Array.from(
             filteredLogs.reduce<Map<string, TerraformOperationBlockDto[]>>((map, operationBlock) => {
-                // Get all unique tf_req_ids from logs in this block
-                const reqIds = new Set(
-                    (operationBlock.logs || [])
-                        .map((log) => log.tf_req_id)
-                        .filter((id): id is string => id !== undefined && id !== null),
-                )
-
-                // If block has no tf_req_ids or multiple different ones, use block id
-                const groupKey = reqIds.size === 1 ? Array.from(reqIds)[0] : operationBlock
-
-                if (!map.has(groupKey)) map.set(groupKey, [])
-                map.get(groupKey)!.push(operationBlock)
-                return map
-            }, new Map()),
+                // Берем tf_req_id из первого лога или используем id блока
+                const reqId = operationBlock.logs?.[0]?.tf_req_id || operationBlock.id;
+                if (!map.has(reqId)) map.set(reqId, []);
+                map.get(reqId)!.push(operationBlock);
+                return map;
+            }, new Map())
         ).map(([_, operationBlocks]) =>
-            operationBlocks.sort((a, b) => new Date(a.startTime).getTime() - new Date(b.startTime).getTime()),
+            operationBlocks.sort((a, b) => new Date(a.startTime).getTime() - new Date(b.startTime).getTime())
         )
-        : [filteredLogs.sort((a, b) => new Date(a.startTime).getTime() - new Date(b.startTime).getTime())]
+        : [filteredLogs.sort((a, b) => new Date(a.startTime).getTime() - new Date(b.startTime).getTime())];
 
-
-    // ======= Timeline Data =======
-    const timelineData = filteredLogs.flatMap((operationBlock) =>
-        (operationBlock.logs || []).map((log) => ({
-            name: log.tf_req_id || operationBlock.id,
-            timestamp: new Date(log["@timestamp"] || log.timestamp || operationBlock.startTime).getTime(),
-            level: log["@level"] || "unknown",
-            action: log.tf_rpc || operationBlock.type,
+    // Timeline data (также добавьте эту переменную)
+    const timelineData = filteredLogs.map((operationBlock) => {
+        // Берем данные из первого лога в блоке или используем значения по умолчанию
+        const firstLog = operationBlock.logs?.[0];
+        return {
+            name: firstLog?.tf_req_id || operationBlock.id,
+            timestamp: new Date(operationBlock.startTime).getTime(),
+            level: firstLog?.["@level"] || "unknown",
+            action: firstLog?.tf_rpc || operationBlock.type,
             endTime: new Date(operationBlock.endTime).getTime(),
-            duration:
-                log.tf_req_duration_ms ||
-                new Date(operationBlock.endTime).getTime() - new Date(operationBlock.startTime).getTime(),
-        })),
-    )
+            duration: firstLog?.tf_req_duration_ms ||
+                (new Date(operationBlock.endTime).getTime() - new Date(operationBlock.startTime).getTime())
+        };
+    });
+
+    // Функция для форматирования даты и времени с миллисекундами
+    const formatDateTimeWithMs = (timestamp: number) => {
+        const date = new Date(timestamp);
+        return date.toLocaleString("ru-RU", {
+            year: 'numeric',
+            month: '2-digit',
+            day: '2-digit',
+            hour: '2-digit',
+            minute: '2-digit',
+            second: '2-digit',
+            fractionalSecondDigits: 3,
+            timeZoneName: 'shortOffset'
+        });
+    };
+
 
 // ======= Render =======
 
@@ -640,34 +871,124 @@ return (
             )}
 
             {activeTab === "timeline" && (
-                <div>
-                    {timelineData.length === 0 ? (
-                        <p className="text-gray-400">Загрузите логи, чтобы увидеть хронологию.</p>
-                    ) : (
-                        <ResponsiveContainer width="100%" height={400}>
-                            <BarChart data={timelineData}>
-                                <CartesianGrid strokeDasharray="3 3" />
-                                <XAxis
-                                    dataKey="timestamp"
-                                    tickFormatter={(ts) =>
-                                        new Date(ts).toLocaleTimeString("ru-RU")
-                                    }
-                                />
-                                <YAxis dataKey="name" type="category" />
-                                <Tooltip
-                                    formatter={(value, name) => {
-                                        if (name === "timestamp") {
-                                            return [new Date(Number(value)).toLocaleString("ru-RU"), "Start Time"];
-                                        }
-                                        if (name === "duration") {
-                                            return [`${value}ms`, "Duration"];
-                                        }
-                                        return [value, name];
-                                    }}
-                                />
-                                <Bar dataKey="timestamp" fill="#8884d8" />
-                            </BarChart>
-                        </ResponsiveContainer>
+                <div className="space-y-6">
+                    <div className="bg-white p-6 rounded-lg border shadow-sm">
+                        <h2 className="text-xl font-bold mb-4">Диаграмма Ганта - Группировка по tf_req_id</h2>
+                        <p className="text-gray-600 mb-4">
+                            Отображает группы логов, сгруппированные по tf_req_id, с реальным временем начала и окончания операций
+                        </p>
+
+                        {ganttData.length === 0 ? (
+                            <p className="text-gray-400 text-center py-8">
+                                Загрузите логи, чтобы увидеть диаграмму Ганта.
+                            </p>
+                        ) : (
+                            <div className="h-96">
+                                <ResponsiveContainer width="100%" height="100%">
+                                    <ScatterChart
+                                        data={scatterData}
+                                    >
+                                        <CartesianGrid strokeDasharray="3 3" />
+                                        <XAxis
+                                            type="number"
+                                            dataKey="x"
+                                            domain={timeDomain}
+                                            tickFormatter={timeFormatter}
+                                            label={{ value: 'Время', position: 'insideBottom', offset: -5 }}
+                                        />
+                                        <YAxis
+                                            type="category"
+                                            dataKey="name"
+                                            width={180}
+                                            tick={{ fontSize: 12 }}
+                                            tickFormatter={(value) => value.slice(0, 25) + '...'}
+                                        />
+                                        <Tooltip content={<CustomTooltip />} />
+                                        <Scatter
+                                            dataKey="duration"
+                                            shape={<CustomScatter />}
+                                        />
+                                    </ScatterChart>
+                                </ResponsiveContainer>
+                            </div>
+                        )}
+                    </div>
+
+                    {/* Дополнительная статистика */}
+                    {ganttData.length > 0 && (
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                            <div className="bg-white p-4 rounded-lg border shadow-sm">
+                                <h3 className="font-bold text-lg mb-2">Общая статистика</h3>
+                                <p><strong>Всего групп:</strong> {ganttData.length}</p>
+                                <p><strong>Всего логов:</strong> {ganttData.reduce((sum, item) => sum + item.logCount, 0)}</p>
+                                <p><strong>Средняя длительность:</strong> {Math.round(ganttData.reduce((sum, item) => sum + item.duration, 0) / ganttData.length)}ms</p>
+                            </div>
+
+                            <div className="bg-white p-4 rounded-lg border shadow-sm">
+                                <h3 className="font-bold text-lg mb-2">Распределение по RPC типам</h3>
+                                <div className="space-y-2">
+                                    {Object.entries(
+                                        ganttData.reduce((acc: {[key: string]: number}, item) => {
+                                            acc[item.rpcType] = (acc[item.rpcType] || 0) + 1;
+                                            return acc;
+                                        }, {})
+                                    ).map(([rpcType, count]) => (
+                                        <div key={rpcType} className="flex items-center justify-between">
+                                            <div className="flex items-center gap-2">
+                                                <div
+                                                    className="w-3 h-3 rounded-sm"
+                                                    style={{ backgroundColor: getColorByRpcType(rpcType) }}
+                                                ></div>
+                                                <span><strong>{rpcType}:</strong></span>
+                                            </div>
+                                            <span>{count}</span>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+
+                            <div className="bg-white p-4 rounded-lg border shadow-sm">
+                                <h3 className="font-bold text-lg mb-2">Временной диапазон</h3>
+                                <div className="bg-white p-4 rounded-lg border shadow-sm">
+                                    <h3 className="font-bold text-lg mb-2">Временной диапазон</h3>
+                                    <p><strong>Начало:</strong> {formatDateTimeWithMs(Math.min(...ganttData.map(d => d.startTime)))}</p>
+                                    <p><strong>Окончание:</strong> {formatDateTimeWithMs(Math.max(...ganttData.map(d => d.endTime)))}</p>
+                                    <p><strong>Общая длительность:</strong> {Math.max(...ganttData.map(d => d.endTime)) - Math.min(...ganttData.map(d => d.startTime))}ms</p>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* Детальный список групп */}
+                    {ganttData.length > 0 && (
+                        <div className="bg-white p-6 rounded-lg border shadow-sm">
+                            <h3 className="text-lg font-bold mb-4">Детали групп</h3>
+                            <div className="space-y-3 max-h-96 overflow-y-auto">
+                                {getGroupedByTfReqId.map((group, index) => (
+                                    <div key={group.tf_req_id} className="p-3 border rounded-lg hover:bg-gray-50">
+                                        <div className="flex justify-between items-start">
+                                            <div>
+                                                <p className="font-mono text-sm">{group.tf_req_id}</p>
+                                                <p className="text-xs text-gray-600">
+                                                    {group.startTime.toLocaleString()} - {group.endTime.toLocaleString()}
+                                                </p>
+                                            </div>
+                                            <div className="text-right">
+                                                <span
+                                                    className="px-2 py-1 rounded text-xs text-white font-medium"
+                                                    style={{ backgroundColor: getColorByRpcType(group.rpcType) }}
+                                                >
+                                                    {group.rpcType}
+                                                </span>
+                                                <p className="text-xs text-gray-600 mt-1">
+                                                    {group.logCount} логов, {group.duration}ms
+                                                </p>
+                                            </div>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
                     )}
                 </div>
             )}
