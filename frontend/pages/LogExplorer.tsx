@@ -262,53 +262,60 @@ export default function LogExplorer() {
     };
 
     // ======= Filtering =======
-    const filteredLogs = logs.filter((operationBlock) => {
-        if (read.has(operationBlock.id)) return false;
+    const filteredLogs = logs
+        .filter((operationBlock) => {
+            const logArray = operationBlock.logs;
+            if (!Array.isArray(logArray) || logArray.length === 0) return false;
 
-        const logArray = operationBlock.logs;
-        if (!Array.isArray(logArray) || logArray.length === 0) return false;
+            return logArray.some((log) => {
+                const matchesSearch =
+                    (log["@message"]?.toLowerCase().includes(searchQuery.toLowerCase()) ?? false) ||
+                    (log.tf_req_id?.toLowerCase().includes(searchQuery.toLowerCase()) ?? false) ||
+                    JSON.stringify(log).toLowerCase().includes(searchQuery.toLowerCase());
 
-        return logArray.some((log) => {
-            const matchesSearch =
-                (log["@message"]?.toLowerCase().includes(searchQuery.toLowerCase()) ?? false) ||
-                (log.tf_req_id?.toLowerCase().includes(searchQuery.toLowerCase()) ?? false) ||
-                JSON.stringify(log).toLowerCase().includes(searchQuery.toLowerCase());
+                const matchesType = tfTypeFilter
+                    ? log.tf_resource_type?.toLowerCase() === tfTypeFilter.toLowerCase()
+                    : true;
 
-            const matchesType = tfTypeFilter
-                ? log.tf_resource_type?.toLowerCase() === tfTypeFilter.toLowerCase()
-                : true;
+                const matchesLevel = levelFilter
+                    ? log["@level"]?.toLowerCase() === levelFilter.toLowerCase()
+                    : true;
 
-            const matchesLevel = levelFilter
-                ? log["@level"]?.toLowerCase() === levelFilter.toLowerCase()
-                : true;
+                const matchesAction = actionFilter
+                    ? log.tf_rpc === actionFilter
+                    : true;
 
-            const matchesAction = actionFilter
-                ? log.tf_rpc === actionFilter
-                : true;
+                const matchesTimestamp = (() => {
+                    if (!timestampRange) return true;
+                    const [start, end] = timestampRange;
+                    const operationStart = new Date(operationBlock.startTime);
+                    const operationEnd = new Date(operationBlock.endTime);
 
-            const matchesTimestamp = (() => {
-                if (!timestampRange) return true;
-                const [start, end] = timestampRange;
-                const operationStart = new Date(operationBlock.startTime);
-                const operationEnd = new Date(operationBlock.endTime);
+                    if (start && end) {
+                        const startDate = new Date(start);
+                        const endDate = new Date(end);
+                        return operationStart <= endDate && operationEnd >= startDate;
+                    } else if (start) {
+                        return operationEnd >= new Date(start);
+                    } else if (end) {
+                        return operationStart <= new Date(end);
+                    }
+                    return true;
+                })();
 
-                if (start && end) {
-                    const startDate = new Date(start);
-                    const endDate = new Date(end);
-                    return operationStart <= endDate && operationEnd >= startDate;
-                } else if (start) {
-                    return operationEnd >= new Date(start);
-                } else if (end) {
-                    return operationStart <= new Date(end);
-                }
-                return true;
-            })();
+                return matchesSearch && matchesType && matchesLevel && matchesAction && matchesTimestamp;
+            });
 
-            return matchesSearch && matchesType && matchesLevel && matchesAction && matchesTimestamp;
         });
-    });
 
+    const sortByReadAndTime = (a: TerraformOperationBlockDto, b: TerraformOperationBlockDto) => {
+        const aRead = read.has(a.id) ? 1 : 0;
+        const bRead = read.has(b.id) ? 1 : 0;
 
+        if (aRead !== bRead) return aRead - bRead; // непрочитанные сверху
+
+        return new Date(a.startTime).getTime() - new Date(b.startTime).getTime();
+    };
     // ======= Grouping =======
     const groupedLogs: TerraformOperationBlockDto[][] = grouped
         ? Array.from(
@@ -319,9 +326,9 @@ export default function LogExplorer() {
                 return map;
             }, new Map())
         ).map(([_, operationBlocks]) =>
-            operationBlocks.sort((a, b) => new Date(a.startTime).getTime() - new Date(b.startTime).getTime())
+            operationBlocks.sort(sortByReadAndTime) // сортировка с учётом прочитанных
         )
-        : [filteredLogs.sort((a, b) => new Date(a.startTime).getTime() - new Date(b.startTime).getTime())];
+        : [filteredLogs.sort(sortByReadAndTime)];
 
     // ======= Timeline Data =======
     const timelineData = filteredLogs.map((operationBlock) => ({
