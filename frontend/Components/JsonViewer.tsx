@@ -54,9 +54,9 @@ console.log(data['@message']);
             <div className="">
                 <button
                     onClick={() => setOpenMap((prev) => ({...prev, [path]: !isOpen}))}
-                    className={`text-sm text-[var(--primary)] hover:underline mb-1 ${getFontColor(data.LevelParsed)}`}
+                    className={`text-sm text-[var(--primary)] text-left hover:underline mb-1 ${getFontColor(data.LevelParsed)}`}
                 >
-                    {isOpen ? "▼" : "▶"} [{data['LevelParsed'].toUpperCase()}] {data['@message']} ({data.length})
+                    {isOpen ? "▼" : "▶"} [{data['LevelParsed'].toUpperCase()}] {data['@message']}
                 </button>
                 {isOpen && (
                     <div className="ml-3 border-l pl-2">

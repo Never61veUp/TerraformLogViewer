@@ -239,7 +239,7 @@ export default function LogExplorer() {
 
         logs?.forEach((log: ProcessedLogsDto) => {
             const level = (log.levelParsed || log["@level"] || "unknown").toLowerCase();
-            
+
             switch (level) {
                 case LogLevel.Trace:
                 case "trace":
@@ -409,6 +409,13 @@ export default function LogExplorer() {
         });
     };
 
+    const allTfResourceTypes = useMemo(() => {
+        const types = logs.flatMap(block =>
+            block.logs?.map(log => log.tf_resource_type).filter(Boolean) || []
+        );
+        return Array.from(new Set(types));
+    }, [logs]);
+
     // Функция для получения временной метки по приоритету
     const getTimestampFromLog = (log: ProcessedLogsDto): Date | null => {
         // Приоритет: timestampParsed -> "@timestamp" -> timestamp
@@ -563,7 +570,7 @@ export default function LogExplorer() {
     // Кастомная точка для ScatterChart
     const CustomScatter = (props: any) => {
         const { cx, cy, x, y, payload, width } = props;
-        
+
         return (
             <Rectangle
                 x={cx - width / 2}
@@ -582,7 +589,7 @@ export default function LogExplorer() {
     const CustomTooltip = ({ active, payload, label }: any) => {
         if (active && payload && payload.length) {
             const data = payload[0].payload;
-            
+
             // Подсчитываем логи по уровням
             const logLevelCounts = {
                 trace: 0,
@@ -595,7 +602,7 @@ export default function LogExplorer() {
             // Проходим по всем логам в группе
             data.allLogs?.forEach((log: ProcessedLogsDto) => {
                 const level = (log.levelParsed || log["@level"] || "unknown").toLowerCase();
-                
+
                 switch (level) {
                     case LogLevel.Trace:
                     case "trace":
@@ -628,7 +635,7 @@ export default function LogExplorer() {
                     <p><strong>End:</strong> {formatDateTimeWithMs(data.endTime)}</p>
                     <p><strong>Duration:</strong> {data.duration}ms</p>
                     <p><strong>Log Count:</strong> {data.logCount}</p>
-                    
+
                     <div className="mt-2 pt-2 border-t border-gray-200">
                         <p className="font-semibold mb-1">Log Levels:</p>
                         <div className="grid grid-cols-2 gap-1 text-sm">
@@ -654,8 +661,7 @@ export default function LogExplorer() {
         }
         return null;
     };
-
-    // Обновленные данные для ScatterChart (добавляем allLogs)
+    // Альтернативные данные для ScatterChart
     const scatterData = useMemo(() => {
         if (getGroupedByTfReqId.length === 0) return [];
 
@@ -895,7 +901,7 @@ const sortByReadAndTime = (a: TerraformOperationBlockDto, b: TerraformOperationB
             >
                 <div className="flex items-center justify-between flex-wrap gap-2">
                     <div className="flex items-center gap-3 flex-wrap">
-                        <span 
+                        <span
                             className="text-xs font-bold px-2 py-1 rounded text-white"
                             style={{ backgroundColor: getColorByRpcType(group.rpcType) }}
                         >
@@ -996,16 +1002,16 @@ const sortByReadAndTime = (a: TerraformOperationBlockDto, b: TerraformOperationB
                             <div className="mb-4 p-3 bg-gray-50 rounded-lg border border-gray-200 space-y-4">
                                 {group.allLogs.map((log, logIndex) => {
                                     const isLogExpanded = expandedLogs.has(`${group.tf_req_id}-${logIndex}`);
-                                    
+
                                     return (
                                         <div key={logIndex} className="border-b pb-3 last:border-b-0">
                                             {/* Заголовок лога с кнопкой раскрытия */}
-                                            <div 
+                                            <div
                                                 className="font-semibold mb-2 text-gray-700 cursor-pointer hover:bg-gray-100 p-2 rounded flex justify-between items-center"
                                                 onClick={() => toggleLogExpansion(`${group.tf_req_id}-${logIndex}`)}
                                             >
                                                 <div>
-                                                    Лог #{logIndex + 1} 
+                                                    Лог #{logIndex + 1}
                                                     {log["@timestamp"] && ` - ${new Date(log["@timestamp"]).toLocaleTimeString()}`}
                                                     {log["@level"] && ` [${log["@level"]}]`}
                                                     {log.tf_resource_type && ` - ${log.tf_resource_type}`}
@@ -1043,7 +1049,7 @@ const sortByReadAndTime = (a: TerraformOperationBlockDto, b: TerraformOperationB
                                                                 .map(([key, value]) => (
                                                                     <LogRow key={`${logIndex}-${key}`} keyName={key} value={value} parentId={group.tf_req_id} />
                                                                 ))}
-                                                            
+
                                                             {/* Additional Data */}
                                                             {log.additionalData && Object.keys(log.additionalData).length > 0 && (
                                                                 <div className="mt-3 p-3 bg-blue-50 rounded-lg border border-blue-200 space-y-2">
@@ -1067,6 +1073,7 @@ const sortByReadAndTime = (a: TerraformOperationBlockDto, b: TerraformOperationB
             </motion.div>
         );
     };
+
 
     return (
         <>
@@ -1130,13 +1137,18 @@ const sortByReadAndTime = (a: TerraformOperationBlockDto, b: TerraformOperationB
                                     value={searchQuery}
                                     onChange={(e) => setSearchQuery(e.target.value)}
                                 />
-                                <input
-                                    type="text"
-                                    placeholder="tf_resource_type"
+                                <select
                                     className="px-3 py-2 border rounded-lg min-w-[150px]"
                                     value={tfTypeFilter}
                                     onChange={(e) => setTfTypeFilter(e.target.value)}
-                                />
+                                >
+                                    <option value="">All</option> {/* выбор всех */}
+                                    {allTfResourceTypes.map(type => (
+                                        <option key={type} value={type}>
+                                            {type}
+                                        </option>
+                                    ))}
+                                </select>
                                 <select
                                     className="px-3 py-2 border rounded-lg"
                                     value={levelFilter}
@@ -1197,13 +1209,16 @@ const sortByReadAndTime = (a: TerraformOperationBlockDto, b: TerraformOperationB
                                                 const logData = operationBlock.logs;
                                                 const firstLog = logData?.[0];
 
-                                                return (
-                                                    <motion.div
-                                                        key={operationBlock.id}
-                                                        layout
-                                                        className={`rounded-xl border p-4 transition cursor-pointer ${isRead ? "opacity-50" : ""} ${getBlockColor(operationBlock.logLevelCounts)} ${getBlockBorderColor(operationBlock.logLevelCounts, operationBlock.type)}`}
-                                                        onClick={() => setExpanded(isExpanded ? null : operationBlock.id)}
-                                                    >
+                                            return (
+
+                                                <motion.div
+
+                                                    key={operationBlock.id}
+                                                    layout
+                                                    className={`rounded-xl border p-4 transition cursor-pointer ${isRead ? "opacity-50 " : ""} ${getBlockColor(operationBlock.logLevelCounts)} ${getBlockBorderColor(operationBlock.logLevelCounts, operationBlock.type)}`}
+                                                    onClick={() => setExpanded(isExpanded ? null : operationBlock.id)}
+                                                >
+
                                                         <div className="flex items-center justify-between flex-wrap gap-2">
                                                             <div className="flex items-center gap-3 flex-wrap">
                                                                 <span className={`text-xs font-bold px-2 py-1 rounded ${firstLog?.["@level"] === "info" || !firstLog?.["@level"] ? "bg-green-100 text-green-800" : firstLog?.["@level"] === "warn" ? "bg-yellow-100 text-yellow-800" : "bg-red-100 text-red-800"}`}>
@@ -1238,7 +1253,14 @@ const sortByReadAndTime = (a: TerraformOperationBlockDto, b: TerraformOperationB
                                                         </div>
 
                                                         <div className="mt-2 text-sm text-gray-700">
-                                                            {firstLog ? getLogSummary(firstLog) : "No message"}
+                                                            {operationBlock && operationBlock.logs && operationBlock.logs.length > 0 ? (
+                                                            <>
+                                                                <span className="font-bold">[{operationBlock.logs[0]!["@level"]}]</span>{" "}
+                                                                {operationBlock.logs[0]!["@message"]}
+                                                            </>
+                                                        ) : (
+                                                            "No message"
+                                                        )}
                                                         </div>
 
                                                         {/* Отображение уровней логирования для блока */}
@@ -1275,94 +1297,54 @@ const sortByReadAndTime = (a: TerraformOperationBlockDto, b: TerraformOperationB
                                                                     </span>
                                                                 )}
                                                             </div>
-                                                        )}
+                                                        )}<AnimatePresence>
+                                                        {isExpanded && logData && (
+                                                            <motion.div
+                                                                initial={{ opacity: 0, height: 0 }}
+                                                                animate={{ opacity: 1, height: "auto" }}
+                                                                exit={{ opacity: 0, height: 0 }}
+                                                                className="mt-3 rounded bg-gray-50 border text-sm overflow-x-auto"
+                                                                onClick={(e) => e.stopPropagation()}
+                                                            >
 
-                                                        <AnimatePresence>
-                                                            {isExpanded && logData && (
-                                                                <motion.div
-                                                                    initial={{ opacity: 0, height: 0 }}
-                                                                    animate={{ opacity: 1, height: "auto" }}
-                                                                    exit={{ opacity: 0, height: 0 }}
-                                                                    className="mt-3 rounded bg-gray-50 border text-sm overflow-x-auto"
-                                                                    onClick={(e) => e.stopPropagation()}
-                                                                >
-                                                                    <div className="font-bold mb-3">Подробнее о блоке:</div>
-                                                                    <div className="grid grid-cols-2 gap-1 mb-3 p-3 bg-blue-50 rounded-lg border border-blue-200">
-                                                                        <div><strong>Id:</strong> {operationBlock.id}</div>
-                                                                        <div><strong>Время начала:</strong> {new Date(operationBlock.startTime).toLocaleString()}</div>
-                                                                        <div><strong>Тип:</strong> {operationBlock.type}</div>
-                                                                        <div><strong>Время конца:</strong> {new Date(operationBlock.endTime).toLocaleString()}</div>
-                                                                        <div><strong>Кол-во логов:</strong> {operationBlock.logCount || logData.length}</div>
-                                                                    </div>
+                                                                <AnimatePresence>
+                                                                    {isExpanded && logData && (
+                                                                        <motion.div
+                                                                            initial={{ opacity: 0, height: 0 }}
+                                                                            animate={{ opacity: 1, height: "auto" }}
+                                                                            exit={{ opacity: 0, height: 0 }}
+                                                                            className="rounded-lg bg-blue-50 text-sm overflow-x-auto"
+                                                                            onClick={(e) => e.stopPropagation()}
+                                                                        >
 
-                                                                    <div className="font-bold mb-3">Логи ({logData.length}):</div>
-                                                                    <div className="mb-4 p-3 bg-gray-50 rounded-lg border border-gray-200 space-y-4">
-                                                                        {logData.map((log, logIndex) => {
-                                                                            const isLogExpanded = expandedLogs.has(`${operationBlock.id}-${logIndex}`);
-                                                                            
-                                                                            return (
-                                                                                <div key={logIndex} className="border-b pb-3 last:border-b-0">
-                                                                                    {/* Заголовок лога с кнопкой раскрытия */}
-                                                                                    <div 
-                                                                                        className="font-semibold mb-2 text-gray-700 cursor-pointer hover:bg-gray-100 p-2 rounded flex justify-between items-center"
-                                                                                        onClick={() => toggleLogExpansion(`${operationBlock.id}-${logIndex}`)}
-                                                                                    >
-                                                                                        <div>
-                                                                                            Лог #{logIndex + 1} 
-                                                                                            {log["@timestamp"] && ` - ${new Date(log["@timestamp"]).toLocaleTimeString()}`}
-                                                                                            {log["@level"] && ` [${log["@level"]}]`}
-                                                                                        </div>
-                                                                                        <ChevronDown
-                                                                                            className={`w-4 h-4 transition-transform ${isLogExpanded ? "rotate-180" : ""}`}
-                                                                                        />
-                                                                                    </div>
+                                                                            <div className="grid grid-cols-2 gap-1 mb-3 p-3 bg-blue-50 rounded-lg border-blue-200 mx-auto">
+                                                                                <div className="font-bold mb-3">Подробнее о блоке:</div>
+                                                                                <div><strong>Id:</strong> {operationBlock.id}</div>
+                                                                                <div><strong>Время начала:</strong> {new Date(operationBlock.startTime).toLocaleString()}</div>
+                                                                                <div><strong>Тип:</strong> {operationBlock.type}</div>
+                                                                                <div><strong>Время конца:</strong> {new Date(operationBlock.endTime).toLocaleString()}</div>
+                                                                                <div><strong>Кол-во логов:</strong> {operationBlock.logCount}</div>
+                                                                            </div>
 
-                                                                                    {/* Раскрывающееся содержимое лога */}
-                                                                                    <AnimatePresence>
-                                                                                        {isLogExpanded && (
-                                                                                            <motion.div
-                                                                                                initial={{ opacity: 0, height: 0 }}
-                                                                                                animate={{ opacity: 1, height: "auto" }}
-                                                                                                exit={{ opacity: 0, height: 0 }}
-                                                                                                className="overflow-hidden"
-                                                                                            >
-                                                                                                <div className="space-y-2 pl-4 border-l-2 border-gray-300 ml-2">
-                                                                                                    {/* Системные поля (@timestamp, @level, @message и т.д.) */}
-                                                                                                    <div className="mt-3 p-3 bg-green-50 rounded-lg border border-green-200 space-y-2">
-                                                                                                        <div className="font-bold text-sm mb-2 text-green-800">System Fields:</div>
-                                                                                                        {Object.entries(log)
-                                                                                                            .filter(([key]) => key.startsWith('@'))
-                                                                                                            .map(([key, value]) => (
-                                                                                                                <div key={`${logIndex}-system-${key}`} className="flex">
-                                                                                                                    <span className="font-mono text-gray-600 mr-2 min-w-[120px]">{key}:</span>
-                                                                                                                    <span className="text-gray-800">{value?.toString()}</span>
-                                                                                                                </div>
-                                                                                                            ))}
-                                                                                                    </div>
-                                                                                                    {/* Основные поля лога */}
-                                                                                                    {Object.entries(log)
-                                                                                                        .filter(([key]) => !key.startsWith('@') && key !== 'additionalData')
-                                                                                                        .map(([key, value]) => (
-                                                                                                            <LogRow key={`${logIndex}-${key}`} keyName={key} value={value} parentId={operationBlock.id} />
-                                                                                                        ))}
-                                                                                                    
-                                                                                                    {/* Additional Data */}
-                                                                                                    {log.additionalData && Object.keys(log.additionalData).length > 0 && (
-                                                                                                        <div className="mt-3 p-3 bg-blue-50 rounded-lg border border-blue-200 space-y-2">
-                                                                                                            <div className="font-bold text-sm mb-2 text-blue-800">Additional Data:</div>
-                                                                                                            {Object.entries(log.additionalData).map(([key, value]) => (
-                                                                                                                <LogRow key={`${logIndex}-additional-${key}`} keyName={key} value={value} parentId={operationBlock.id} />
-                                                                                                            ))}
-                                                                                                        </div>
-                                                                                                    )}
-                                                                                                </div>
-                                                                                            </motion.div>
-                                                                                        )}
-                                                                                    </AnimatePresence>
+                                                                            {/* Additional Data */}
+                                                                            {logData && Object.keys(logData).length > 0 && (
+                                                                                    <div className="mt-4 p-3 rounded-lg ">
+                                                                                    <div className="font-bold text-sm mb-2 text-blue-800">ЛОГИ:</div>
+                                                                                    {Object.entries(logData).map(([key, value]) => (
+
+                                                                                            <JsonViewer
+                                                                                                key={key}
+                                                                                                data={value}
+                                                                                                depth={0}
+                                                                                            />
+
+
+                                                                                    ))}
                                                                                 </div>
-                                                                            );
-                                                                        })}
-                                                                    </div>
+                                                                            )}
+                                                                        </motion.div>
+                                                                    )}
+                                                                </AnimatePresence>
                                                                 </motion.div>
                                                             )}
                                                         </AnimatePresence>
@@ -1480,7 +1462,7 @@ const sortByReadAndTime = (a: TerraformOperationBlockDto, b: TerraformOperationB
 
                 group.allLogs?.forEach((log: ProcessedLogsDto) => {
                     const level = (log.levelParsed || log["@level"] || "unknown").toLowerCase();
-                    
+
                     switch (level) {
                         case LogLevel.Trace:
                         case "trace":
@@ -1515,7 +1497,7 @@ const sortByReadAndTime = (a: TerraformOperationBlockDto, b: TerraformOperationB
                                 </p>
                             </div>
                             <div className="text-right">
-                                <span 
+                                <span
                                     className="px-2 py-1 rounded text-xs text-white font-medium"
                                     style={{ backgroundColor: getColorByRpcType(group.rpcType) }}
                                 >
@@ -1526,7 +1508,7 @@ const sortByReadAndTime = (a: TerraformOperationBlockDto, b: TerraformOperationB
                                 </p>
                             </div>
                         </div>
-                        
+
                                         {/* Информация об уровнях логов */}
                                         <div className="flex flex-wrap gap-2 mt-2 pt-2 border-t border-gray-200">
                                             {logLevelCounts.trace > 0 && (
