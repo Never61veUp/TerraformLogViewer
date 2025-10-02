@@ -463,42 +463,6 @@ export default function LogExplorer() {
         );
     };
 
-    // Кастомный тултип для диаграммы Ганта
-    const CustomTooltip = ({ active, payload, label }: any) => {
-        if (active && payload && payload.length) {
-            const data = payload[0].payload;
-
-            return (
-                <div className="bg-white p-4 border border-gray-300 rounded-lg shadow-lg">
-                    <p className="font-bold">{data.tf_req_id}</p>
-                    <p><strong>RPC Type:</strong> {data.rpcType}</p>
-                    <p><strong>Start:</strong> {formatDateTimeWithMs(data.startTime)}</p>
-                    <p><strong>End:</strong> {formatDateTimeWithMs(data.endTime)}</p>
-                    <p><strong>Duration:</strong> {data.duration}ms</p>
-                    <p><strong>Log Count:</strong> {data.logCount}</p>
-                </div>
-            );
-        }
-        return null;
-    };
-    // Альтернативные данные для ScatterChart
-    const scatterData = useMemo(() => {
-        if (getGroupedByTfReqId.length === 0) return [];
-
-        return getGroupedByTfReqId.map((group, index) => ({
-            x: group.startTime.getTime(),
-            y: index,
-            width: group.duration,
-            startTime: group.startTime.getTime(),
-            endTime: group.endTime.getTime(),
-            duration: group.duration,
-            logCount: group.logCount,
-            rpcType: group.rpcType,
-            tf_req_id: group.tf_req_id,
-            name: group.tf_req_id,
-        }));
-    }, [getGroupedByTfReqId]);
-
     // Кастомная точка для ScatterChart
     const CustomScatter = (props: any) => {
         const { cx, cy, x, y, payload, width } = props;
@@ -516,6 +480,102 @@ export default function LogExplorer() {
             />
         );
     };
+
+    // Кастомный тултип для диаграммы Ганта
+    const CustomTooltip = ({ active, payload, label }: any) => {
+        if (active && payload && payload.length) {
+            const data = payload[0].payload;
+            
+            // Подсчитываем логи по уровням
+            const logLevelCounts = {
+                trace: 0,
+                debug: 0,
+                info: 0,
+                warn: 0,
+                error: 0,
+            };
+
+            // Проходим по всем логам в группе
+            data.allLogs?.forEach((log: ProcessedLogsDto) => {
+                const level = (log.levelParsed || log["@level"] || "unknown").toLowerCase();
+                
+                switch (level) {
+                    case LogLevel.Trace:
+                    case "trace":
+                        logLevelCounts.trace++;
+                        break;
+                    case LogLevel.Debug:
+                    case "debug":
+                        logLevelCounts.debug++;
+                        break;
+                    case LogLevel.Info:
+                    case "info":
+                        logLevelCounts.info++;
+                        break;
+                    case LogLevel.Warn:
+                    case "warn":
+                        logLevelCounts.warn++;
+                        break;
+                    case LogLevel.Error:
+                    case "error":
+                        logLevelCounts.error++;
+                        break;
+                }
+            });
+
+            return (
+                <div className="bg-white p-4 border border-gray-300 rounded-lg shadow-lg">
+                    <p className="font-bold">{data.tf_req_id}</p>
+                    <p><strong>RPC Type:</strong> {data.rpcType}</p>
+                    <p><strong>Start:</strong> {formatDateTimeWithMs(data.startTime)}</p>
+                    <p><strong>End:</strong> {formatDateTimeWithMs(data.endTime)}</p>
+                    <p><strong>Duration:</strong> {data.duration}ms</p>
+                    <p><strong>Log Count:</strong> {data.logCount}</p>
+                    
+                    <div className="mt-2 pt-2 border-t border-gray-200">
+                        <p className="font-semibold mb-1">Log Levels:</p>
+                        <div className="grid grid-cols-2 gap-1 text-sm">
+                            {logLevelCounts.trace > 0 && (
+                                <p className="text-gray-500">Trace: {logLevelCounts.trace}</p>
+                            )}
+                            {logLevelCounts.debug > 0 && (
+                                <p className="text-blue-600">Debug: {logLevelCounts.debug}</p>
+                            )}
+                            {logLevelCounts.info > 0 && (
+                                <p className="text-green-600">Info: {logLevelCounts.info}</p>
+                            )}
+                            {logLevelCounts.warn > 0 && (
+                                <p className="text-yellow-600">Warn: {logLevelCounts.warn}</p>
+                            )}
+                            {logLevelCounts.error > 0 && (
+                                <p className="text-red-600">Error: {logLevelCounts.error}</p>
+                            )}
+                        </div>
+                    </div>
+                </div>
+            );
+        }
+        return null;
+    };
+
+    // Обновленные данные для ScatterChart (добавляем allLogs)
+    const scatterData = useMemo(() => {
+        if (getGroupedByTfReqId.length === 0) return [];
+
+        return getGroupedByTfReqId.map((group, index) => ({
+            x: group.startTime.getTime(),
+            y: index,
+            width: group.duration,
+            startTime: group.startTime.getTime(),
+            endTime: group.endTime.getTime(),
+            duration: group.duration,
+            logCount: group.logCount,
+            rpcType: group.rpcType,
+            tf_req_id: group.tf_req_id,
+            name: group.tf_req_id,
+            allLogs: group.allLogs, // Добавляем allLogs для доступа в тултипе
+        }));
+    }, [getGroupedByTfReqId]);
 
     // Функция для форматирования временной оси
     const timeFormatter = (timestamp: number) => {
@@ -817,23 +877,14 @@ const sortByReadAndTime = (a: TerraformOperationBlockDto, b: TerraformOperationB
                                                             <span className={`text-xs font-bold px-2 py-1 rounded ${firstLog?.["@level"] === "info" || !firstLog?.["@level"] ? "bg-green-100 text-green-800" : firstLog?.["@level"] === "warn" ? "bg-yellow-100 text-yellow-800" : "bg-red-100 text-red-800"}`}>
                                                                 {operationBlock?.type?.toUpperCase() || "UNKNOWN"}
                                                             </span>
-                                                            <span className={`text-xs px-2 py-1 rounded ${operationBlock.type === "plan" ? "bg-blue-100 text-blue-800" : operationBlock.type === "apply" ? "bg-purple-100 text-purple-800" : "bg-gray-100 text-gray-800"}`}>
-                                                                {operationBlock.type}
-                                                            </span>
                                                             <span className="text-sm font-mono text-gray-600">
                                                                 {new Date(operationBlock.startTime).toLocaleString()}
-                                                            </span>
-                                                            <span className="text-xs px-2 py-1 rounded bg-gray-200 text-gray-800">
-                                                                req_id: {firstLog?.tf_req_id || "N/A"}
-                                                            </span>
-                                                            <span className="text-xs px-2 py-1 rounded bg-gray-200 text-gray-800">
-                                                                type: {firstLog?.tf_resource_type || "N/A"}
                                                             </span>
                                                             <span className="text-xs px-2 py-1 rounded bg-gray-200 text-gray-800">
                                                                 logs: {operationBlock.logCount || logData?.length || 0}
                                                             </span>
                                                             <span className="text-xs px-2 py-1 rounded bg-gray-200 text-gray-800">
-                                                                duration: {firstLog?.tf_req_duration_ms || (new Date(operationBlock.endTime).getTime() - new Date(operationBlock.startTime).getTime())}ms
+                                                                duration: {(new Date(operationBlock.endTime).getTime() - new Date(operationBlock.startTime).getTime())}ms
                                                             </span>
                                                         </div>
                                                         <div className="flex items-center gap-2">
@@ -1043,36 +1094,108 @@ const sortByReadAndTime = (a: TerraformOperationBlockDto, b: TerraformOperationB
                         </div>
                     )}
 
-                    {/* Детальный список групп */}
-                    {ganttData.length > 0 && (
-                        <div className="bg-white p-6 rounded-lg border shadow-sm">
-                            <h3 className="text-lg font-bold mb-4">Детали групп</h3>
-                            <div className="space-y-3 max-h-96 overflow-y-auto">
-                                {getGroupedByTfReqId.map((group, index) => (
-                                    <div key={group.tf_req_id} className="p-3 border rounded-lg hover:bg-gray-50">
-                                        <div className="flex justify-between items-start">
-                                            <div>
-                                                <p className="font-mono text-sm">{group.tf_req_id}</p>
-                                                <p className="text-xs text-gray-600">
-                                                    {group.startTime.toLocaleString()} - {group.endTime.toLocaleString()}
-                                                </p>
-                                            </div>
-                                            <div className="text-right">
-                                                <span 
-                                                    className="px-2 py-1 rounded text-xs text-white font-medium"
-                                                    style={{ backgroundColor: getColorByRpcType(group.rpcType) }}
-                                                >
-                                                    {group.rpcType}
-                                                </span>
-                                                <p className="text-xs text-gray-600 mt-1">
-                                                    {group.logCount} логов, {group.duration}ms
-                                                </p>
-                                            </div>
-                                        </div>
-                                    </div>
-                                ))}
+{/* Детальный список групп */}
+{ganttData.length > 0 && (
+    <div className="bg-white p-6 rounded-lg border shadow-sm">
+        <h3 className="text-lg font-bold mb-4">Детали групп</h3>
+        <div className="space-y-3 max-h-96 overflow-y-auto">
+            {getGroupedByTfReqId.map((group, index) => {
+                // Подсчитываем логи по уровням для каждой группы
+                const logLevelCounts = {
+                    trace: 0,
+                    debug: 0,
+                    info: 0,
+                    warn: 0,
+                    error: 0,
+                };
+
+                group.allLogs?.forEach((log: ProcessedLogsDto) => {
+                    const level = (log.levelParsed || log["@level"] || "unknown").toLowerCase();
+                    
+                    switch (level) {
+                        case LogLevel.Trace:
+                        case "trace":
+                            logLevelCounts.trace++;
+                            break;
+                        case LogLevel.Debug:
+                        case "debug":
+                            logLevelCounts.debug++;
+                            break;
+                        case LogLevel.Info:
+                        case "info":
+                            logLevelCounts.info++;
+                            break;
+                        case LogLevel.Warn:
+                        case "warn":
+                            logLevelCounts.warn++;
+                            break;
+                        case LogLevel.Error:
+                        case "error":
+                            logLevelCounts.error++;
+                            break;
+                    }
+                });
+
+                return (
+                    <div key={group.tf_req_id} className="p-3 border rounded-lg hover:bg-gray-50">
+                        <div className="flex justify-between items-start mb-2">
+                            <div className="flex-1">
+                                <p className="font-mono text-sm">{group.tf_req_id}</p>
+                                <p className="text-xs text-gray-600">
+                                    {group.startTime.toLocaleString()} - {group.endTime.toLocaleString()}
+                                </p>
+                            </div>
+                            <div className="text-right">
+                                <span 
+                                    className="px-2 py-1 rounded text-xs text-white font-medium"
+                                    style={{ backgroundColor: getColorByRpcType(group.rpcType) }}
+                                >
+                                    {group.rpcType}
+                                </span>
+                                <p className="text-xs text-gray-600 mt-1">
+                                    {group.logCount} логов, {group.duration}ms
+                                </p>
                             </div>
                         </div>
+                        
+                                        {/* Информация об уровнях логов */}
+                                        <div className="flex flex-wrap gap-2 mt-2 pt-2 border-t border-gray-200">
+                                            {logLevelCounts.trace > 0 && (
+                                                <span className="inline-flex items-center px-2 py-0.5 rounded text-xs bg-gray-100 text-gray-700">
+                                                    <span className="w-2 h-2 rounded-full bg-gray-400 mr-1"></span>
+                                                    Trace: {logLevelCounts.trace}
+                                                </span>
+                                            )}
+                                            {logLevelCounts.debug > 0 && (
+                                                <span className="inline-flex items-center px-2 py-0.5 rounded text-xs bg-blue-100 text-blue-700">
+                                                    <span className="w-2 h-2 rounded-full bg-blue-500 mr-1"></span>
+                                                    Debug: {logLevelCounts.debug}
+                                                </span>
+                                            )}
+                                            {logLevelCounts.info > 0 && (
+                                                <span className="inline-flex items-center px-2 py-0.5 rounded text-xs bg-green-100 text-green-700">
+                                                    <span className="w-2 h-2 rounded-full bg-green-500 mr-1"></span>
+                                                    Info: {logLevelCounts.info}
+                                                </span>
+                                            )}
+                                            {logLevelCounts.warn > 0 && (
+                                                <span className="inline-flex items-center px-2 py-0.5 rounded text-xs bg-yellow-100 text-yellow-700">
+                                                    <span className="w-2 h-2 rounded-full bg-yellow-500 mr-1"></span>
+                                                    Warn: {logLevelCounts.warn}
+                                                </span>
+                                            )}
+                                            {logLevelCounts.error > 0 && (
+                                                <span className="inline-flex items-center px-2 py-0.5 rounded text-xs bg-red-100 text-red-700">
+                                                    <span className="w-2 h-2 rounded-full bg-red-500 mr-1"></span>
+                                                    Error: {logLevelCounts.error}
+                                                </span>
+                                            )}
+                                        </div>
+                                    </div>
+                                );
+                            })}
+                        </div>
+                    </div>
                     )}
                 </div>
             )}
