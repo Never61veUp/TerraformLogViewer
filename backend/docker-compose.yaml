@@ -15,7 +15,7 @@ services:
       - ASPNETCORE_URLS=http://+:5050
     restart: unless-stopped
     networks:
-      - coolify
+      - 4cb3c83ff369
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.logviewer.rule=Host(`api.terraformlogviewer.ru`)"
@@ -33,4 +33,4 @@ services:
     depends_on:
       - logviewer.host
     networks:
-      - coolify
+      - 4cb3c83ff369
