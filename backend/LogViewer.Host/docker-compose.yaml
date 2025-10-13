@@ -1,0 +1,36 @@
+﻿networks:
+  coolify:
+    external: true
+
+services:
+  logviewer-host:
+    container_name: logviewer-host
+    build:
+      context: .
+      dockerfile: LogViewer.Host/Dockerfile
+    ports:
+      - "5050:5050"
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Production
+      - ASPNETCORE_URLS=http://+:5050
+    restart: unless-stopped
+    networks:
+      - coolify
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.logviewer.rule=Host(`api.terraformlogviewer.ru`)"
+      - "traefik.http.routers.logviewer.entrypoints=https"
+      - "traefik.http.routers.logviewer.tls.certresolver=letsencrypt"
+  logviewer.next:
+    container_name: logviewer-next
+    build:
+      context: ../frontend
+      dockerfile: Dockerfile
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=production
+    depends_on:
+      - logviewer.host
+    networks:
+      - coolify
