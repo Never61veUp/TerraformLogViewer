@@ -15,42 +15,14 @@ public sealed class GroupDetector : IGroupDetector
             ["other"] = new()
         };
 
-        // Упрощенные регулярные выражения - ищем просто наличие операций в аргументах
-        var planPatterns = new[]
-        {
-            @"terraform\s+plan", // terraform plan
-            @"starting\s+Plan\s+operation", // starting Plan operation
-            @"CLI\s+args:[^]]*plan[^]]*\]", // CLI args: [anything containing plan]
-            @"CLI\s+command\s+args:[^]]*plan[^]]*\]", // CLI command args: [anything containing plan]
-            @"""plan""", // "plan" в любом контексте CLI args
-            @"\[\s*[^]]*""plan""[^]]*\]" // [anything containing "plan"]
-        };
-
-        var applyPatterns = new[]
-        {
-            @"terraform\s+apply", // terraform apply
-            @"starting\s+Apply\s+operation", // starting Apply operation
-            @"CLI\s+args:[^]]*apply[^]]*\]", // CLI args: [anything containing apply]
-            @"CLI\s+command\s+args:[^]]*apply[^]]*\]", // CLI command args: [anything containing apply]
-            @"""apply""", // "apply" в любом контексте CLI args
-            @"\[\s*[^]]*""apply""[^]]*\]" // [anything containing "apply"]
-        };
+        var planPatterns = new[] { @"terraform\s+plan", @"starting\s+Plan\s+operation", @"CLI\s+args:[^]]*plan[^]]*\]", @"CLI\s+command\s+args:[^]]*plan[^]]*\]", @"""plan""", @"\[\s*[^]]*""plan""[^]]*\]" };
+        var applyPatterns = new[] { @"terraform\s+apply", @"starting\s+Apply\s+operation", @"CLI\s+args:[^]]*apply[^]]*\]", @"CLI\s+command\s+args:[^]]*apply[^]]*\]", @"""apply""", @"\[\s*[^]]*""apply""[^]]*\]" };
 
         foreach (var entry in logEntries)
         {
             var message = entry.Message ?? "";
-            var operationType = "other";
-
-            if (planPatterns.Any(pattern => Regex.IsMatch(message, pattern, RegexOptions.IgnoreCase)))
-            {
-                operationType = "plan";
-                Console.WriteLine($"PLAN DETECTED: {message}");
-            }
-            else if (applyPatterns.Any(pattern => Regex.IsMatch(message, pattern, RegexOptions.IgnoreCase)))
-            {
-                operationType = "apply";
-                Console.WriteLine($"APPLY DETECTED: {message}");
-            }
+            var operationType = planPatterns.Any(pattern => Regex.IsMatch(message, pattern, RegexOptions.IgnoreCase)) ? "plan" :
+                applyPatterns.Any(pattern => Regex.IsMatch(message, pattern, RegexOptions.IgnoreCase)) ? "apply" : "other";
 
             groups[operationType].Add(entry);
         }
